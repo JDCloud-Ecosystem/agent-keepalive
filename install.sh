@@ -1,12 +1,11 @@
 #!/bin/bash
-# Claude Code session keep-alive — installer for Ubuntu Server
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONFIG_FILE="$SCRIPT_DIR/config.sh"
 SESSION_FILE="$SCRIPT_DIR/session-starter.sh"
 
-# ── OS check ──────────────────────────────────────────────────────────────────
+# ── OS / apt check ────────────────────────────────────────────────────────────
 if [[ "$(uname -s)" != "Linux" ]]; then
     echo "ERROR: This script must run on Linux (Ubuntu Server)."
     echo "       Copy this repository to your server and run it there."
@@ -18,16 +17,41 @@ if ! command -v apt-get >/dev/null 2>&1; then
     exit 1
 fi
 
-# ── Verify sudo once ──────────────────────────────────────────────────────────
+# ── Sudo check ────────────────────────────────────────────────────────────────
 if [[ $EUID -ne 0 ]]; then
     echo "This installer needs sudo to install packages. You may be prompted for your password."
     sudo -v || { echo "ERROR: sudo access required."; exit 1; }
 fi
 
-# ── Language selection ────────────────────────────────────────────────────────
+# ── Colors & language ─────────────────────────────────────────────────────────
+_set_colors() {
+    export NEWT_COLORS='
+root=,black
+border=brown,black
+window=brown,black
+shadow=black,black
+title=yellow,black
+button=black,brown
+actbutton=white,brown
+checkbox=brown,black
+actcheckbox=black,brown
+entry=brown,black
+label=brown,black
+listbox=brown,black
+actlistbox=black,brown
+textbox=brown,black
+acttextbox=black,brown
+helpline=,black
+roottext=brown,black
+emptyscale=black,black
+disabledentry=gray,black
+'
+}
+
 _pick_lang() {
+    _set_colors
     if command -v whiptail >/dev/null 2>&1; then
-        whiptail --title "Claude Session Installer" \
+        whiptail --title "Language" \
             --menu "Choose language / Elige idioma:" 10 45 2 \
             "en" "English" \
             "es" "Español" \
@@ -42,9 +66,17 @@ _pick_lang() {
 LANGUAGE=$(_pick_lang)
 clear
 
+# ── ASCII header (always in cyan, not translated) ─────────────────────────────
+printf '\033[1;36m%s\033[0m\n' '░█▀▀░█░░░█▀█░█░█░█▀▄░█▀▀░░░█▀▀░█▀▀░█▀▀░█▀▀░▀█▀░█▀█░█▀█'
+printf '\033[1;36m%s\033[0m\n' '░█░░░█░░░█▀█░█░█░█░█░█▀▀░░░▀▀█░█▀▀░▀▀█░▀▀█░░█░░█░█░█░█'
+printf '\033[1;36m%s\033[0m\n' '░▀▀▀░▀▀▀░▀░▀░▀▀▀░▀▀░░▀▀▀░░░▀▀▀░▀▀▀░▀▀▀░▀▀▀░▀▀▀░▀▀▀░▀░▀'
+printf '\033[1;36m%s\033[0m\n' '░▀█▀░█▀█░█▀▀░▀█▀░█▀█░█░░░█░░░█▀▀░█▀▄░█                '
+printf '\033[1;36m%s\033[0m\n' '░░█░░█░█░▀▀█░░█░░█▀█░█░░░█░░░█▀▀░█▀▄░▀                '
+printf '\033[1;36m%s\033[0m\n' '░▀▀▀░▀░▀░▀▀▀░░▀░░▀░▀░▀▀▀░▀▀▀░▀▀▀░▀░▀░▀                '
+echo ""
+
 # ── String tables ─────────────────────────────────────────────────────────────
 if [[ "$LANGUAGE" == "es" ]]; then
-    S_TITLE="Instalador de sesión de Claude"
     S_DEPS="Verificando e instalando dependencias"
     S_INSTALLING="Instalando"
     S_INSTALLED="ya instalado"
@@ -53,7 +85,7 @@ if [[ "$LANGUAGE" == "es" ]]; then
     S_CLAUDE_FOUND="Claude Code encontrado"
     S_CONFIG="Creando configuración"
     S_CRON="Configurando crontab"
-    S_DONE="¡Instalación completada!"
+    S_DONE="── ¡Instalación Completada! — Claude Session ──"
     S_LOGIN_WARN="Inicia sesión en Claude con:  claude login"
     S_TEST_CMD="  Prueba:           bash test.sh"
     S_SCHED_CMD="  Editar horario:   bash update-schedule.sh"
@@ -61,7 +93,6 @@ if [[ "$LANGUAGE" == "es" ]]; then
     S_ERR_NODE="ERROR: No se pudo instalar Node.js. Instálalo manualmente."
     S_ERR_CLAUDE="ERROR: No se pudo instalar Claude Code."
 else
-    S_TITLE="Claude Session Installer"
     S_DEPS="Checking and installing dependencies"
     S_INSTALLING="Installing"
     S_INSTALLED="already installed"
@@ -70,7 +101,7 @@ else
     S_CLAUDE_FOUND="Claude Code found"
     S_CONFIG="Creating configuration"
     S_CRON="Setting up crontab"
-    S_DONE="Installation complete!"
+    S_DONE="── Installation Complete! — Claude Session ──"
     S_LOGIN_WARN="Log in to Claude with:  claude login"
     S_TEST_CMD="  Test:             bash test.sh"
     S_SCHED_CMD="  Edit schedule:    bash update-schedule.sh"
@@ -83,11 +114,6 @@ step() { echo ""; echo "▶ $*"; }
 ok()   { echo "  ✓ $*"; }
 warn() { echo "  ⚠ $*"; }
 die()  { echo "  ✗ $*"; exit 1; }
-
-echo "┌─────────────────────────────────────┐"
-printf "│  %-36s│\n" "$S_TITLE"
-echo "└─────────────────────────────────────┘"
-echo ""
 
 # ── Package dependencies ──────────────────────────────────────────────────────
 step "$S_DEPS"
@@ -149,7 +175,6 @@ EOF
     chmod +x "$CONFIG_FILE"
     ok "config.sh created"
 else
-    # Preserve existing settings; only update language
     sed -i "s/^LANGUAGE=.*/LANGUAGE=\"$LANGUAGE\"/" "$CONFIG_FILE"
     ok "config.sh already exists (settings preserved)"
 fi
@@ -157,10 +182,10 @@ fi
 source "$CONFIG_FILE"
 
 # ── Permissions ───────────────────────────────────────────────────────────────
-chmod +x "$SESSION_FILE"         2>/dev/null || true
-chmod +x "$SCRIPT_DIR/update-schedule.sh" 2>/dev/null || true
-chmod +x "$SCRIPT_DIR/test.sh"   2>/dev/null || true
-chmod +x "$SCRIPT_DIR/uninstall.sh" 2>/dev/null || true
+chmod +x "$SESSION_FILE"                          2>/dev/null || true
+chmod +x "$SCRIPT_DIR/update-schedule.sh"         2>/dev/null || true
+chmod +x "$SCRIPT_DIR/test.sh"                    2>/dev/null || true
+chmod +x "$SCRIPT_DIR/uninstall.sh"               2>/dev/null || true
 
 # ── Crontab ───────────────────────────────────────────────────────────────────
 step "$S_CRON"
@@ -178,9 +203,7 @@ ok "crontab configured"
 
 # ── Done ──────────────────────────────────────────────────────────────────────
 echo ""
-echo "┌─────────────────────────────────────┐"
-printf "│  %-36s│\n" "$S_DONE"
-echo "└─────────────────────────────────────┘"
+printf '\033[1;32m%s\033[0m\n' "$S_DONE"
 echo ""
 printf "  $S_SCHED_FMT\n" \
     "$MORNING_HOUR" "$MORNING_MINUTE" \

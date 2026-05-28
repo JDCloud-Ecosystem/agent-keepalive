@@ -1,13 +1,48 @@
 #!/bin/bash
-# Removes all traces of Claude Session: crontab, generated files, and optionally Claude Code and Node.js.
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONFIG_FILE="$SCRIPT_DIR/config.sh"
 LOG_FILE="$SCRIPT_DIR/sessions.log"
 
+# ── Colors ────────────────────────────────────────────────────────────────────
+export NEWT_COLORS='
+root=,black
+border=brown,black
+window=brown,black
+shadow=black,black
+title=yellow,black
+button=black,brown
+actbutton=white,brown
+checkbox=brown,black
+actcheckbox=black,brown
+entry=brown,black
+label=brown,black
+listbox=brown,black
+actlistbox=black,brown
+textbox=brown,black
+acttextbox=black,brown
+helpline=,black
+roottext=brown,black
+emptyscale=black,black
+disabledentry=gray,black
+'
+
+# ── Language selection (always ask) ──────────────────────────────────────────
 [[ -f "$CONFIG_FILE" ]] && source "$CONFIG_FILE" 2>/dev/null || true
-LANGUAGE="${LANGUAGE:-en}"
+_DEFAULT_LANG="${LANGUAGE:-en}"
+
+if command -v whiptail >/dev/null 2>&1; then
+    LANGUAGE=$(whiptail --title "Language" \
+        --menu "Choose language / Elige idioma:" 10 45 2 \
+        "en" "English" \
+        "es" "Español" \
+        3>&1 1>&2 2>&3) || LANGUAGE="$_DEFAULT_LANG"
+else
+    printf "\nChoose language / Elige idioma:\n  1) English\n  2) Español\n"
+    read -rp "Choice [1/2, default=1]: " _c
+    [[ "${_c:-1}" == "2" ]] && LANGUAGE="es" || LANGUAGE="en"
+fi
 
 # ── String tables ─────────────────────────────────────────────────────────────
 if [[ "$LANGUAGE" == "es" ]]; then
@@ -21,7 +56,7 @@ if [[ "$LANGUAGE" == "es" ]]; then
     T_CLAUDE_OK="Claude Code desinstalado"
     T_NODE_OK="Node.js desinstalado"
     T_SKIP="Omitido"
-    T_DONE="¡Desinstalación completa!"
+    T_DONE="── Desinstalación Completa — Claude Session ──"
     T_CANCELLED="Cancelado."
 else
     T_TITLE="Uninstall Claude Session"
@@ -34,7 +69,7 @@ else
     T_CLAUDE_OK="Claude Code uninstalled"
     T_NODE_OK="Node.js uninstalled"
     T_SKIP="Skipped"
-    T_DONE="Uninstall complete!"
+    T_DONE="── Uninstall Complete — Claude Session ──"
     T_CANCELLED="Cancelled."
 fi
 
@@ -65,11 +100,7 @@ else
 fi
 
 # 2. Generated files
-rm -f \
-    "$CONFIG_FILE" \
-    "$LOG_FILE" \
-    "${LOG_FILE}.old" \
-    "${LOG_FILE}.tmp"
+rm -f "$CONFIG_FILE" "$LOG_FILE" "${LOG_FILE}.old" "${LOG_FILE}.tmp"
 echo "  ✓ $T_FILES_OK"
 
 # 3. Claude Code (optional)
@@ -93,5 +124,5 @@ if command -v node >/dev/null 2>&1; then
 fi
 
 echo ""
-echo "  $T_DONE"
+printf '\033[1;32m%s\033[0m\n' "$T_DONE"
 echo ""
