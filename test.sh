@@ -84,9 +84,9 @@ crontab -l 2>/dev/null | grep -q "session-starter" \
 if [[ -x "$SESSION_FILE" ]]; then
     echo ""
     _info "$T_RUNNING..."
-    LOG_BEFORE=$(wc -l < "$LOG_FILE" 2>/dev/null || echo 0)
+    LOG_BEFORE=$([ -f "$LOG_FILE" ] && wc -l < "$LOG_FILE" || echo 0)
     bash "$SESSION_FILE" 2>&1 | sed 's/^/    /'
-    LOG_AFTER=$(wc -l < "$LOG_FILE" 2>/dev/null || echo 0)
+    LOG_AFTER=$([ -f "$LOG_FILE" ] && wc -l < "$LOG_FILE" || echo 0)
     (( LOG_AFTER > LOG_BEFORE )) && _ok "$T_LOG_OK" || _fail "$T_LOG_F"
 fi
 
