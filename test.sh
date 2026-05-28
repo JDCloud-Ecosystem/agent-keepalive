@@ -1,5 +1,4 @@
 #!/bin/bash
-# Smoke test — verifies all components are installed and working.
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -10,12 +9,48 @@ LOG_FILE="$SCRIPT_DIR/sessions.log"
 PASS=0
 FAIL=0
 
+# ── Colors ────────────────────────────────────────────────────────────────────
+export NEWT_COLORS='
+root=,black
+border=brown,black
+window=brown,black
+shadow=black,black
+title=yellow,black
+button=black,brown
+actbutton=white,brown
+checkbox=brown,black
+actcheckbox=black,brown
+entry=brown,black
+label=brown,black
+listbox=brown,black
+actlistbox=black,brown
+textbox=brown,black
+acttextbox=black,brown
+helpline=,black
+roottext=brown,black
+emptyscale=black,black
+disabledentry=gray,black
+'
+
+# ── Language selection (always ask) ──────────────────────────────────────────
 [[ -f "$CONFIG_FILE" ]] && source "$CONFIG_FILE" 2>/dev/null || true
-LANGUAGE="${LANGUAGE:-en}"
+_DEFAULT_LANG="${LANGUAGE:-en}"
+
+if command -v whiptail >/dev/null 2>&1; then
+    LANGUAGE=$(whiptail --title "Language" \
+        --menu "Choose language / Elige idioma:" 10 45 2 \
+        "en" "English" \
+        "es" "Español" \
+        3>&1 1>&2 2>&3) || LANGUAGE="$_DEFAULT_LANG"
+else
+    printf "\nChoose language / Elige idioma:\n  1) English\n  2) Español\n"
+    read -rp "Choice [1/2, default=1]: " _c
+    [[ "${_c:-1}" == "2" ]] && LANGUAGE="es" || LANGUAGE="en"
+fi
 
 # ── String tables ─────────────────────────────────────────────────────────────
 if [[ "$LANGUAGE" == "es" ]]; then
-    T_TITLE="Prueba de humo — Claude Session"
+    T_TITLE="── Prueba de Humo — Claude Session ──"
     T_OS="Sistema operativo: Linux"
     T_OS_F="Requiere Linux — ejecuta este script en tu servidor"
     T_CRON="Servicio cron activo"
@@ -29,11 +64,11 @@ if [[ "$LANGUAGE" == "es" ]]; then
     T_RUNNING="Ejecutando session-starter.sh"
     T_LOG_OK="Log actualizado correctamente"
     T_LOG_F="El log no se actualizó (¿iniciaste sesión con claude login?)"
-    T_ALL_OK="Todas las pruebas pasaron"
-    T_FAIL_S="%d prueba(s) fallaron"
+    T_ALL_OK="── Todas las Pruebas Pasaron — Claude Session ──"
+    T_FAIL_S="── %d Prueba(s) Fallaron — Claude Session ──"
     T_LOGIN="Inicia sesión en Claude:  claude login"
 else
-    T_TITLE="Smoke test — Claude Session"
+    T_TITLE="── Smoke Test — Claude Session ──"
     T_OS="OS: Linux"
     T_OS_F="Requires Linux — run this on your server, not Windows"
     T_CRON="Cron service is active"
@@ -47,8 +82,8 @@ else
     T_RUNNING="Running session-starter.sh"
     T_LOG_OK="Log updated successfully"
     T_LOG_F="Log was not updated (did you run: claude login?)"
-    T_ALL_OK="All tests passed"
-    T_FAIL_S="%d test(s) failed"
+    T_ALL_OK="── All Tests Passed — Claude Session ──"
+    T_FAIL_S="── %d Test(s) Failed — Claude Session ──"
     T_LOGIN="Log in to Claude:  claude login"
 fi
 
@@ -57,7 +92,7 @@ _fail() { echo "  ✗ $*"; (( FAIL++ )) || true; }
 _info() { echo "  • $*"; }
 
 echo ""
-echo "── $T_TITLE ──"
+printf '\033[1;36m%s\033[0m\n' "$T_TITLE"
 echo ""
 
 # 1. OS
@@ -92,9 +127,9 @@ fi
 
 echo ""
 if (( FAIL == 0 )); then
-    echo "  ✓ $T_ALL_OK"
+    printf '\033[1;32m%s\033[0m\n' "$T_ALL_OK"
 else
-    printf "  ✗ $T_FAIL_S\n" "$FAIL"
+    printf '\033[1;31m'"$T_FAIL_S"'\033[0m\n' "$FAIL"
     echo ""
     echo "  ⚠  $T_LOGIN"
 fi

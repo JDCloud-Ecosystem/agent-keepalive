@@ -1,5 +1,4 @@
 #!/bin/bash
-# Executed by cron — sends two messages to Claude to keep the session alive.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONFIG_FILE="$SCRIPT_DIR/config.sh"
 LOG_FILE="$SCRIPT_DIR/sessions.log"
