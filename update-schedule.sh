@@ -18,22 +18,22 @@ fi
 # ── Colors ────────────────────────────────────────────────────────────────────
 export NEWT_COLORS='
 root=,black
-border=brown,black
-window=brown,black
+border=yellow,black
+window=yellow,black
 shadow=black,black
 title=yellow,black
-button=black,brown
-actbutton=white,brown
-checkbox=brown,black
-actcheckbox=black,brown
-entry=brown,black
-label=brown,black
-listbox=brown,black
-actlistbox=black,brown
-textbox=brown,black
-acttextbox=black,brown
+button=black,yellow
+actbutton=white,yellow
+checkbox=yellow,black
+actcheckbox=black,yellow
+entry=yellow,black
+label=yellow,black
+listbox=yellow,black
+actlistbox=black,yellow
+textbox=yellow,black
+acttextbox=black,yellow
 helpline=,black
-roottext=brown,black
+roottext=yellow,black
 emptyscale=black,black
 disabledentry=gray,black
 '
