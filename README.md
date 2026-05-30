@@ -1,6 +1,6 @@
 # claude-keepalive
 
-Mantiene activa tu sesión de Claude Code enviando mensajes automáticos al día mediante cron. Soporta hasta 3 sesiones diarias (mañana, tarde y noche opcional), cada una activable y desactivable de forma independiente.
+Mantiene activas las sesiones de **Claude Code** y **Codex** enviando mensajes automáticos al día mediante cron. Soporta hasta 3 sesiones diarias (mañana, tarde y noche opcional), configurables de forma independiente. Codex se instala automáticamente pero su cron está desactivado por defecto.
 
 > **Plataforma:** Ubuntu Server (Linux). El desarrollo puede hacerse en Windows — el archivo `.gitattributes` fuerza saltos de línea LF para que los `.sh` lleguen sin corrupción al servidor.
 
@@ -9,12 +9,12 @@ Mantiene activa tu sesión de Claude Code enviando mensajes automáticos al día
 ## Qué hace
 
 ```
-07:00 → [MORNING]   Envía mensajes a Claude  (reinicia el contador de 5 horas)
-12:00 → [AFTERNOON] Envía mensajes a Claude  (reinicia el contador de 5 horas)
-17:00 → [NIGHT]     Envía mensajes a Claude  (opcional, desactivado por defecto)
+07:00 → [MORNING]   Envía mensajes a Claude y/o Codex  (reinicia el contador de 5 horas)
+12:00 → [AFTERNOON] Envía mensajes a Claude y/o Codex  (reinicia el contador de 5 horas)
+17:00 → [NIGHT]     Envía mensajes a Claude y/o Codex  (opcional, desactivado por defecto)
 ```
 
-Los horarios, días y qué sesiones están activas se configuran mediante una interfaz gráfica de terminal (TUI). La sesión nocturna puede activarse en cualquier momento con `bash update-schedule.sh`.
+Cada sesión y cada herramienta (Claude / Codex) se activan o desactivan de forma independiente desde `bash update-schedule.sh`. Los logs se guardan en archivos separados: `sessions.log` (Claude) y `codex-sessions.log` (Codex).
 
 ---
 
@@ -50,9 +50,10 @@ El instalador hace todo automáticamente:
 2. Instala `git`, `curl`, `cron` y `whiptail` (solo si faltan)
 3. Instala **Node.js LTS** vía NodeSource (solo si falta)
 4. Instala **Claude Code** vía `npm install -g @anthropic-ai/claude-code` (solo si falta)
-5. Crea `config.sh` con el horario por defecto (lunes a viernes, 07:00 y 12:00; noche desactivada)
-6. Registra los cron jobs
-7. Muestra un resumen
+5. Instala **Codex** vía `npm install -g @openai/codex` (solo si falta)
+6. Crea `config.sh` con el horario por defecto (lunes a viernes, 07:00 y 12:00; noche y Codex desactivados)
+7. Registra los cron jobs
+8. Muestra un resumen
 
 > **En Guacamole:** usa **Ctrl+Alt+Shift** para abrir el panel lateral, sube los archivos via "Devices → Upload Files", y luego ejecuta `bash install.sh` en la terminal SSH.
 
@@ -60,13 +61,14 @@ El instalador hace todo automáticamente:
 
 ## Primer inicio de sesión (obligatorio)
 
-El instalador no puede autenticarte en Claude automáticamente. Al terminar `install.sh`, ejecuta:
+El instalador no puede autenticarte automáticamente. Al terminar `install.sh`, ejecuta cada herramienta que vayas a usar:
 
 ```bash
-claude login
+claude login   # Autenticar Claude Code
+codex login    # Autenticar Codex (solo si lo vas a usar)
 ```
 
-Sigue el enlace que aparece en la terminal. Tus credenciales se guardan en `~/.claude/` y son privadas para tu usuario.
+Las credenciales se guardan en sus respectivos directorios de configuración y son privadas para tu usuario.
 
 ---
 
@@ -99,6 +101,7 @@ La interfaz gráfica de terminal (whiptail) permite:
 
 - Seleccionar cualquier combinación de días con flechas y Espacio
 - Activar o desactivar cada sesión (mañana, tarde, noche) de forma independiente
+- Activar o desactivar Codex (se ejecuta en el mismo horario que Claude cuando está activo)
 - Configurar la hora y minuto de cada sesión activa
 - Confirmar antes de aplicar
 
@@ -116,7 +119,8 @@ Los cambios se escriben en `config.sh` y el crontab se actualiza de inmediato, s
 | `test.sh`            | repo     | Smoke test                                                 |
 | `uninstall.sh`       | repo     | Elimina todo                                               |
 | `config.sh`          | generado | Configuración de horario e idioma (ignorado por git)       |
-| `sessions.log`       | generado | Log de ejecuciones, rotación automática (ignorado por git) |
+| `sessions.log`       | generado | Log de Claude, rotación automática (ignorado por git)      |
+| `codex-sessions.log` | generado | Log de Codex, rotación automática (ignorado por git)       |
 
 ---
 
@@ -126,8 +130,9 @@ Los cambios se escriben en `config.sh` y el crontab se actualiza de inmediato, s
 cat sessions.log
 ```
 
-Cada línea indica de qué sesión proviene mediante una etiqueta entre corchetes (`[MORNING]`, `[AFTERNOON]`, `[NIGHT]`):
+Hay dos archivos de log separados, uno por herramienta. Cada línea incluye la etiqueta de sesión (`[MORNING]`, `[AFTERNOON]`, `[NIGHT]`):
 
+**`sessions.log`** — Claude:
 ```
 [2026-05-28 07:00:01] [MORNING] Starting session reset
 [2026-05-28 07:00:03] [MORNING] Reset: Session initialized...
@@ -135,13 +140,20 @@ Cada línea indica de qué sesión proviene mediante una etiqueta entre corchete
 [2026-05-28 07:00:05] [MORNING] Session complete
 ---
 [2026-05-28 12:00:01] [AFTERNOON] Starting session reset
-[2026-05-28 12:00:03] [AFTERNOON] Reset: Session initialized...
-[2026-05-28 12:00:05] [AFTERNOON] Work:  Session active...
-[2026-05-28 12:00:05] [AFTERNOON] Session complete
+...
 ---
 ```
 
-El log nunca supera **200 líneas**. Al alcanzar el límite se recorta automáticamente a las últimas 50 líneas. No se necesita configurar `logrotate`.
+**`codex-sessions.log`** — Codex (solo cuando `CODEX_ENABLED=true`):
+```
+[2026-05-28 07:00:01] [MORNING] Starting session reset
+[2026-05-28 07:00:03] [MORNING] Reset: Session initialized...
+[2026-05-28 07:00:05] [MORNING] Work:  Session active...
+[2026-05-28 07:00:05] [MORNING] Session complete
+---
+```
+
+Cada log se recorta automáticamente a las últimas 50 líneas al superar **200 líneas**.
 
 ---
 
@@ -190,9 +202,28 @@ AFTERNOON_ENABLED=true  # activa/desactiva la sesión vespertina
 NIGHT_HOUR=17           # 0–23
 NIGHT_MINUTE=0          # 0–59
 NIGHT_ENABLED=false     # activa/desactiva la sesión nocturna (por defecto desactivada)
+CODEX_ENABLED=false     # activa/desactiva Codex en todas las sesiones (por defecto desactivado)
 WEEKDAYS="1,2,3,4,5"   # 0=Dom 1=Lun 2=Mar 3=Mié 4=Jue 5=Vie 6=Sáb
 MAX_LOG_LINES=200       # el log se recorta al alcanzar este número de líneas
 ```
+
+---
+
+## Codex
+
+Codex se instala automáticamente junto a Claude Code. Su cron está **desactivado por defecto**; para activarlo:
+
+```bash
+bash update-schedule.sh   # selecciona "Yes" en el diálogo de Codex
+```
+
+Para ver los logs de Codex:
+
+```bash
+cat codex-sessions.log
+```
+
+> **Nota sobre la sintaxis de Codex:** `session-starter.sh` llama a Codex con `codex "mensaje"`. Si tu versión del CLI requiere flags diferentes (por ejemplo `--approval-mode full-auto`), edita la sección `codex` en `session-starter.sh` según corresponda.
 
 ---
 

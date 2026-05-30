@@ -94,6 +94,9 @@ if [[ "$LANGUAGE" == "es" ]]; then
     S_N_FMT="  Noche:            %02d:%02d"
     S_N_OFF="  Noche:            desactivada"
     S_D_FMT="  Días:             %s"
+    S_CODEX_INSTALL="Instalando Codex"
+    S_CODEX_FOUND="Codex encontrado"
+    S_WARN_CODEX="No se pudo instalar Codex — instálalo con: npm install -g @openai/codex"
     S_ERR_NODE="ERROR: No se pudo instalar Node.js. Instálalo manualmente."
     S_ERR_CLAUDE="ERROR: No se pudo instalar Claude Code."
 else
@@ -114,6 +117,9 @@ else
     S_N_FMT="  Night:            %02d:%02d"
     S_N_OFF="  Night:            disabled"
     S_D_FMT="  Days:             %s"
+    S_CODEX_INSTALL="Installing Codex"
+    S_CODEX_FOUND="Codex found"
+    S_WARN_CODEX="Could not install Codex — install manually: npm install -g @openai/codex"
     S_ERR_NODE="ERROR: Could not install Node.js. Install it manually."
     S_ERR_CLAUDE="ERROR: Could not install Claude Code."
 fi
@@ -166,6 +172,16 @@ else
     ok "$S_CLAUDE_FOUND: $(claude --version 2>/dev/null | head -1)"
 fi
 
+# ── Codex ─────────────────────────────────────────────────────────────────────
+if ! command -v codex >/dev/null 2>&1; then
+    step "$S_CODEX_INSTALL"
+    sudo npm install -g @openai/codex >/dev/null 2>&1 \
+        && ok "codex $(codex --version 2>/dev/null | head -1)" \
+        || warn "$S_WARN_CODEX"
+else
+    ok "$S_CODEX_FOUND: $(codex --version 2>/dev/null | head -1)"
+fi
+
 # ── config.sh ─────────────────────────────────────────────────────────────────
 step "$S_CONFIG"
 
@@ -182,6 +198,7 @@ AFTERNOON_ENABLED=true
 NIGHT_HOUR=17
 NIGHT_MINUTE=0
 NIGHT_ENABLED=false
+CODEX_ENABLED=false
 WEEKDAYS="1,2,3,4,5"
 MAX_LOG_LINES=200
 EOF
@@ -201,6 +218,7 @@ _add_if_missing 'AFTERNOON_ENABLED' 'true'
 _add_if_missing 'NIGHT_HOUR'        '17'
 _add_if_missing 'NIGHT_MINUTE'      '0'
 _add_if_missing 'NIGHT_ENABLED'     'false'
+_add_if_missing 'CODEX_ENABLED'     'false'
 
 source "$CONFIG_FILE"
 
@@ -217,7 +235,7 @@ git -C "$SCRIPT_DIR" config core.fileMode false 2>/dev/null || true
 step "$S_CRON"
 
 {
-    crontab -l 2>/dev/null | grep -v "session-starter" | grep -v "# Claude session" || true
+    crontab -l 2>/dev/null | grep -v "session-starter" | grep -v "# Claude session" | grep -v "# Codex session" || true
     echo ""
     if [[ "${MORNING_ENABLED:-true}" == "true" ]]; then
         echo "# Claude session - morning"
@@ -230,6 +248,20 @@ step "$S_CRON"
     if [[ "${NIGHT_ENABLED:-false}" == "true" ]]; then
         echo "# Claude session - night"
         echo "${NIGHT_MINUTE:-0} ${NIGHT_HOUR:-17} * * $WEEKDAYS $SESSION_FILE night"
+    fi
+    if [[ "${CODEX_ENABLED:-false}" == "true" ]]; then
+        if [[ "${MORNING_ENABLED:-true}" == "true" ]]; then
+            echo "# Codex session - morning"
+            echo "$MORNING_MINUTE $MORNING_HOUR * * $WEEKDAYS $SESSION_FILE morning codex"
+        fi
+        if [[ "${AFTERNOON_ENABLED:-true}" == "true" ]]; then
+            echo "# Codex session - afternoon"
+            echo "$AFTERNOON_MINUTE $AFTERNOON_HOUR * * $WEEKDAYS $SESSION_FILE afternoon codex"
+        fi
+        if [[ "${NIGHT_ENABLED:-false}" == "true" ]]; then
+            echo "# Codex session - night"
+            echo "${NIGHT_MINUTE:-0} ${NIGHT_HOUR:-17} * * $WEEKDAYS $SESSION_FILE night codex"
+        fi
     fi
 } | crontab -
 

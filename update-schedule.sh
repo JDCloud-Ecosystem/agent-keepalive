@@ -59,6 +59,7 @@ AFTERNOON_ENABLED="${AFTERNOON_ENABLED:-true}"
 NIGHT_ENABLED="${NIGHT_ENABLED:-false}"
 NIGHT_HOUR="${NIGHT_HOUR:-17}"
 NIGHT_MINUTE="${NIGHT_MINUTE:-0}"
+CODEX_ENABLED="${CODEX_ENABLED:-false}"
 
 # ── String tables ─────────────────────────────────────────────────────────────
 if [[ "$LANGUAGE" == "es" ]]; then
@@ -88,6 +89,9 @@ if [[ "$LANGUAGE" == "es" ]]; then
     T_CANCELLED="Cancelado."
     T_BAD_HOUR="ERROR: La hora debe ser un número entre 0 y 23."
     T_BAD_MIN="ERROR: El minuto debe ser un número entre 0 y 59."
+    T_CODEX_Q="¿Activar Codex en las sesiones automáticas?\n(se ejecutará junto a Claude en el mismo horario)"
+    T_CODEX_ON="Codex:     activado"
+    T_CODEX_OFF="Codex:     desactivado"
     T_NO_DAYS="ERROR: Selecciona al menos un día."
     T_NO_SESSIONS="ERROR: Activa al menos una sesión."
 else
@@ -117,6 +121,9 @@ else
     T_CANCELLED="Cancelled."
     T_BAD_HOUR="ERROR: Hour must be a number between 0 and 23."
     T_BAD_MIN="ERROR: Minute must be a number between 0 and 59."
+    T_CODEX_Q="Enable Codex in automatic sessions?\n(will run alongside Claude on the same schedule)"
+    T_CODEX_ON="Codex:     enabled"
+    T_CODEX_OFF="Codex:     disabled"
     T_NO_DAYS="ERROR: Select at least one day."
     T_NO_SESSIONS="ERROR: Enable at least one session."
 fi
@@ -172,6 +179,19 @@ if [[ "$NEW_MORNING_ENABLED" == "false" && \
     echo "$T_NO_SESSIONS"; exit 1
 fi
 
+# ── Codex toggle ──────────────────────────────────────────────────────────────
+if [[ "$CODEX_ENABLED" == "true" ]]; then
+    whiptail --title "$T_TITLE" --yesno "$T_CODEX_Q" 10 56 3>&1 1>&2 2>&3
+else
+    whiptail --title "$T_TITLE" --yesno "$T_CODEX_Q" 10 56 --defaultno 3>&1 1>&2 2>&3
+fi
+case $? in
+    0)   NEW_CODEX_ENABLED=true  ;;
+    1)   NEW_CODEX_ENABLED=false ;;
+    255) echo "$T_CANCELLED"; exit 0 ;;
+    *)   NEW_CODEX_ENABLED=false ;;
+esac
+
 # ── Time inputs ───────────────────────────────────────────────────────────────
 _ask() {
     whiptail --title "$T_TITLE" --inputbox "$1" 8 42 "$2" 3>&1 1>&2 2>&3
@@ -214,14 +234,16 @@ if [[ "$NEW_NIGHT_ENABLED"     == "true" ]]; then _check_h "$NEW_N_H"; _check_m 
 [[ "$NEW_MORNING_ENABLED"   == "true" ]] && _ml=$(printf "$T_M_FMT" "$NEW_M_H" "$NEW_M_M") || _ml="$T_M_DIS"
 [[ "$NEW_AFTERNOON_ENABLED" == "true" ]] && _al=$(printf "$T_A_FMT" "$NEW_A_H" "$NEW_A_M") || _al="$T_A_DIS"
 [[ "$NEW_NIGHT_ENABLED"     == "true" ]] && _nl=$(printf "$T_N_FMT" "$NEW_N_H" "$NEW_N_M") || _nl="$T_N_DIS"
+[[ "$NEW_CODEX_ENABLED"     == "true" ]] && _cl="$T_CODEX_ON" || _cl="$T_CODEX_OFF"
 
-SUMMARY=$(printf "%s\n%s\n%s\n%s" \
+SUMMARY=$(printf "%s\n%s\n%s\n%s\n%s" \
     "$_ml" \
     "$_al" \
     "$_nl" \
-    "$(printf "$T_D_FMT" "$NEW_WEEKDAYS")")
+    "$(printf "$T_D_FMT" "$NEW_WEEKDAYS")" \
+    "$_cl")
 
-whiptail --title "$T_TITLE" --yesno "$T_CONFIRM\n\n$SUMMARY" 16 52 \
+whiptail --title "$T_TITLE" --yesno "$T_CONFIRM\n\n$SUMMARY" 18 56 \
     3>&1 1>&2 2>&3 || { echo "$T_CANCELLED"; exit 0; }
 
 # ── Update config.sh ──────────────────────────────────────────────────────────
@@ -243,11 +265,12 @@ _set_conf 'AFTERNOON_ENABLED' "$NEW_AFTERNOON_ENABLED"
 _set_conf 'NIGHT_HOUR'        "$NEW_N_H"
 _set_conf 'NIGHT_MINUTE'      "$NEW_N_M"
 _set_conf 'NIGHT_ENABLED'     "$NEW_NIGHT_ENABLED"
+_set_conf 'CODEX_ENABLED'     "$NEW_CODEX_ENABLED"
 _set_conf 'WEEKDAYS'          "\"$NEW_WEEKDAYS\""
 
 # ── Update crontab ────────────────────────────────────────────────────────────
 {
-    crontab -l 2>/dev/null | grep -v "session-starter" | grep -v "# Claude session" || true
+    crontab -l 2>/dev/null | grep -v "session-starter" | grep -v "# Claude session" | grep -v "# Codex session" || true
     echo ""
     if [[ "$NEW_MORNING_ENABLED" == "true" ]]; then
         echo "# Claude session - morning"
@@ -261,6 +284,20 @@ _set_conf 'WEEKDAYS'          "\"$NEW_WEEKDAYS\""
         echo "# Claude session - night"
         echo "$NEW_N_M $NEW_N_H * * $NEW_WEEKDAYS $SESSION_FILE night"
     fi
+    if [[ "$NEW_CODEX_ENABLED" == "true" ]]; then
+        if [[ "$NEW_MORNING_ENABLED" == "true" ]]; then
+            echo "# Codex session - morning"
+            echo "$NEW_M_M $NEW_M_H * * $NEW_WEEKDAYS $SESSION_FILE morning codex"
+        fi
+        if [[ "$NEW_AFTERNOON_ENABLED" == "true" ]]; then
+            echo "# Codex session - afternoon"
+            echo "$NEW_A_M $NEW_A_H * * $NEW_WEEKDAYS $SESSION_FILE afternoon codex"
+        fi
+        if [[ "$NEW_NIGHT_ENABLED" == "true" ]]; then
+            echo "# Codex session - night"
+            echo "$NEW_N_M $NEW_N_H * * $NEW_WEEKDAYS $SESSION_FILE night codex"
+        fi
+    fi
 } | crontab -
 
 # ── Result ────────────────────────────────────────────────────────────────────
@@ -270,4 +307,5 @@ printf "  %s\n" "$_ml"
 printf "  %s\n" "$_al"
 printf "  %s\n" "$_nl"
 printf "  $T_D_FMT\n" "$NEW_WEEKDAYS"
+printf "  %s\n" "$_cl"
 echo ""

@@ -4,6 +4,7 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONFIG_FILE="$SCRIPT_DIR/config.sh"
 LOG_FILE="$SCRIPT_DIR/sessions.log"
+CODEX_LOG_FILE="$SCRIPT_DIR/codex-sessions.log"
 
 # ── Colors ────────────────────────────────────────────────────────────────────
 export NEWT_COLORS='
@@ -47,7 +48,7 @@ fi
 # ── String tables ─────────────────────────────────────────────────────────────
 if [[ "$LANGUAGE" == "es" ]]; then
     T_TITLE="Desinstalar Claude Session"
-    T_CONFIRM="¿Desinstalar completamente?\n\nSe eliminará:\n  • Entradas del crontab\n  • config.sh\n  • sessions.log / sessions.log.old"
+    T_CONFIRM="¿Desinstalar completamente?\n\nSe eliminará:\n  • Entradas del crontab\n  • config.sh\n  • sessions.log / codex-sessions.log"
     T_CLAUDE_Q="¿También desinstalar Claude Code?\n(npm uninstall -g @anthropic-ai/claude-code)"
     T_NODE_Q="¿También desinstalar Node.js?\n(apt-get remove nodejs)"
     T_CRON_OK="Entradas crontab eliminadas"
@@ -60,7 +61,7 @@ if [[ "$LANGUAGE" == "es" ]]; then
     T_CANCELLED="Cancelado."
 else
     T_TITLE="Uninstall Claude Session"
-    T_CONFIRM="Uninstall completely?\n\nThis will remove:\n  • Crontab entries\n  • config.sh\n  • sessions.log / sessions.log.old"
+    T_CONFIRM="Uninstall completely?\n\nThis will remove:\n  • Crontab entries\n  • config.sh\n  • sessions.log / codex-sessions.log"
     T_CLAUDE_Q="Also uninstall Claude Code?\n(npm uninstall -g @anthropic-ai/claude-code)"
     T_NODE_Q="Also uninstall Node.js?\n(apt-get remove nodejs)"
     T_CRON_OK="Crontab entries removed"
@@ -93,6 +94,7 @@ if crontab -l 2>/dev/null | grep -q "session-starter"; then
     crontab -l 2>/dev/null \
         | grep -v "session-starter" \
         | grep -v "# Claude session" \
+        | grep -v "# Codex session" \
         | crontab -
     echo "  ✓ $T_CRON_OK"
 else
@@ -100,7 +102,9 @@ else
 fi
 
 # 2. Generated files
-rm -f "$CONFIG_FILE" "$LOG_FILE" "${LOG_FILE}.old" "${LOG_FILE}.tmp"
+rm -f "$CONFIG_FILE" \
+      "$LOG_FILE"       "${LOG_FILE}.old"       "${LOG_FILE}.tmp" \
+      "$CODEX_LOG_FILE" "${CODEX_LOG_FILE}.old" "${CODEX_LOG_FILE}.tmp"
 echo "  ✓ $T_FILES_OK"
 
 # 3. Claude Code (optional)
