@@ -120,7 +120,7 @@ if [[ -x "$SESSION_FILE" ]]; then
     echo ""
     _info "$T_RUNNING..."
     LOG_BEFORE=$([ -f "$LOG_FILE" ] && wc -l < "$LOG_FILE" || echo 0)
-    bash "$SESSION_FILE" 2>&1 | sed 's/^/    /'
+    bash "$SESSION_FILE" morning 2>&1 | sed 's/^/    /'
     LOG_AFTER=$([ -f "$LOG_FILE" ] && wc -l < "$LOG_FILE" || echo 0)
     (( LOG_AFTER > LOG_BEFORE )) && _ok "$T_LOG_OK" || _fail "$T_LOG_F"
 fi
