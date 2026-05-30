@@ -89,7 +89,11 @@ if [[ "$LANGUAGE" == "es" ]]; then
     S_LOGIN_WARN="Inicia sesión en Claude con:  claude login"
     S_TEST_CMD="  Prueba:           bash test.sh"
     S_SCHED_CMD="  Editar horario:   bash update-schedule.sh"
-    S_SCHED_FMT="  Horario:          %02d:%02d y %02d:%02d — días %s"
+    S_M_FMT="  Mañana:           %02d:%02d"
+    S_A_FMT="  Tarde:            %02d:%02d"
+    S_N_FMT="  Noche:            %02d:%02d"
+    S_N_OFF="  Noche:            desactivada"
+    S_D_FMT="  Días:             %s"
     S_ERR_NODE="ERROR: No se pudo instalar Node.js. Instálalo manualmente."
     S_ERR_CLAUDE="ERROR: No se pudo instalar Claude Code."
 else
@@ -105,7 +109,11 @@ else
     S_LOGIN_WARN="Log in to Claude with:  claude login"
     S_TEST_CMD="  Test:             bash test.sh"
     S_SCHED_CMD="  Edit schedule:    bash update-schedule.sh"
-    S_SCHED_FMT="  Schedule:         %02d:%02d and %02d:%02d — days %s"
+    S_M_FMT="  Morning:          %02d:%02d"
+    S_A_FMT="  Afternoon:        %02d:%02d"
+    S_N_FMT="  Night:            %02d:%02d"
+    S_N_OFF="  Night:            disabled"
+    S_D_FMT="  Days:             %s"
     S_ERR_NODE="ERROR: Could not install Node.js. Install it manually."
     S_ERR_CLAUDE="ERROR: Could not install Claude Code."
 fi
@@ -167,8 +175,13 @@ if [[ ! -f "$CONFIG_FILE" ]]; then
 LANGUAGE="$LANGUAGE"
 MORNING_HOUR=7
 MORNING_MINUTE=0
+MORNING_ENABLED=true
 AFTERNOON_HOUR=12
 AFTERNOON_MINUTE=0
+AFTERNOON_ENABLED=true
+NIGHT_HOUR=17
+NIGHT_MINUTE=0
+NIGHT_ENABLED=false
 WEEKDAYS="1,2,3,4,5"
 MAX_LOG_LINES=200
 EOF
@@ -178,6 +191,16 @@ else
     sed -i "s/^LANGUAGE=.*/LANGUAGE=\"$LANGUAGE\"/" "$CONFIG_FILE"
     ok "config.sh already exists (settings preserved)"
 fi
+
+# Add new variables if missing (migration for existing installs)
+_add_if_missing() {
+    grep -q "^${1}=" "$CONFIG_FILE" || echo "${1}=${2}" >> "$CONFIG_FILE"
+}
+_add_if_missing 'MORNING_ENABLED'   'true'
+_add_if_missing 'AFTERNOON_ENABLED' 'true'
+_add_if_missing 'NIGHT_HOUR'        '17'
+_add_if_missing 'NIGHT_MINUTE'      '0'
+_add_if_missing 'NIGHT_ENABLED'     'false'
 
 source "$CONFIG_FILE"
 
@@ -196,10 +219,18 @@ step "$S_CRON"
 {
     crontab -l 2>/dev/null | grep -v "session-starter" | grep -v "# Claude session" || true
     echo ""
-    echo "# Claude session - morning"
-    echo "$MORNING_MINUTE $MORNING_HOUR * * $WEEKDAYS $SESSION_FILE"
-    echo "# Claude session - afternoon"
-    echo "$AFTERNOON_MINUTE $AFTERNOON_HOUR * * $WEEKDAYS $SESSION_FILE"
+    if [[ "${MORNING_ENABLED:-true}" == "true" ]]; then
+        echo "# Claude session - morning"
+        echo "$MORNING_MINUTE $MORNING_HOUR * * $WEEKDAYS $SESSION_FILE morning"
+    fi
+    if [[ "${AFTERNOON_ENABLED:-true}" == "true" ]]; then
+        echo "# Claude session - afternoon"
+        echo "$AFTERNOON_MINUTE $AFTERNOON_HOUR * * $WEEKDAYS $SESSION_FILE afternoon"
+    fi
+    if [[ "${NIGHT_ENABLED:-false}" == "true" ]]; then
+        echo "# Claude session - night"
+        echo "${NIGHT_MINUTE:-0} ${NIGHT_HOUR:-17} * * $WEEKDAYS $SESSION_FILE night"
+    fi
 } | crontab -
 
 ok "crontab configured"
@@ -208,10 +239,14 @@ ok "crontab configured"
 echo ""
 printf '\033[1;32m%s\033[0m\n' "$S_DONE"
 echo ""
-printf "  $S_SCHED_FMT\n" \
-    "$MORNING_HOUR" "$MORNING_MINUTE" \
-    "$AFTERNOON_HOUR" "$AFTERNOON_MINUTE" \
-    "$WEEKDAYS"
+[[ "${MORNING_ENABLED:-true}"   == "true" ]] && printf "$S_M_FMT\n" "$MORNING_HOUR"         "$MORNING_MINUTE"
+[[ "${AFTERNOON_ENABLED:-true}" == "true" ]] && printf "$S_A_FMT\n" "$AFTERNOON_HOUR"        "$AFTERNOON_MINUTE"
+if [[ "${NIGHT_ENABLED:-false}" == "true" ]]; then
+    printf "$S_N_FMT\n" "${NIGHT_HOUR:-17}" "${NIGHT_MINUTE:-0}"
+else
+    echo "$S_N_OFF"
+fi
+printf "$S_D_FMT\n" "$WEEKDAYS"
 echo ""
 echo "$S_TEST_CMD"
 echo "$S_SCHED_CMD"

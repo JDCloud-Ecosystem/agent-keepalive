@@ -8,6 +8,14 @@ LOG_FILE="$SCRIPT_DIR/sessions.log"
 MAX_LINES="${MAX_LOG_LINES:-200}"
 TS=$(date '+%Y-%m-%d %H:%M:%S')
 
+SESSION_TYPE="${1:-morning}"
+case "$SESSION_TYPE" in
+    morning)   SESSION_LABEL="MORNING"   ;;
+    afternoon) SESSION_LABEL="AFTERNOON" ;;
+    night)     SESSION_LABEL="NIGHT"     ;;
+    *)         SESSION_LABEL="SESSION"   ;;
+esac
+
 _rotate() {
     [[ ! -f "$LOG_FILE" ]] && return
     local lines
@@ -18,7 +26,7 @@ _rotate() {
     fi
 }
 
-_log() { printf "[%s] %s\n" "$TS" "$1" >> "$LOG_FILE"; }
+_log() { printf "[%s] [%s] %s\n" "$TS" "$SESSION_LABEL" "$1" >> "$LOG_FILE"; }
 
 _rotate
 

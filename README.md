@@ -1,6 +1,6 @@
 # claude-keepalive
 
-Mantiene activa tu sesión de Claude Code enviando dos mensajes automáticos al día mediante cron.
+Mantiene activa tu sesión de Claude Code enviando mensajes automáticos al día mediante cron. Soporta hasta 3 sesiones diarias (mañana, tarde y noche opcional), cada una activable y desactivable de forma independiente.
 
 > **Plataforma:** Ubuntu Server (Linux). El desarrollo puede hacerse en Windows — el archivo `.gitattributes` fuerza saltos de línea LF para que los `.sh` lleguen sin corrupción al servidor.
 
@@ -9,11 +9,12 @@ Mantiene activa tu sesión de Claude Code enviando dos mensajes automáticos al 
 ## Qué hace
 
 ```
-07:00 → Envía "New session initialized..." a Claude  (reinicia el contador de 5 horas)
-12:00 → Envía "Session active..."            a Claude  (reinicia el contador de 5 horas)
+07:00 → [MORNING]   Envía mensajes a Claude  (reinicia el contador de 5 horas)
+12:00 → [AFTERNOON] Envía mensajes a Claude  (reinicia el contador de 5 horas)
+17:00 → [NIGHT]     Envía mensajes a Claude  (opcional, desactivado por defecto)
 ```
 
-Los horarios y días se configuran mediante una interfaz gráfica de terminal (TUI).
+Los horarios, días y qué sesiones están activas se configuran mediante una interfaz gráfica de terminal (TUI). La sesión nocturna puede activarse en cualquier momento con `bash update-schedule.sh`.
 
 ---
 
@@ -49,7 +50,7 @@ El instalador hace todo automáticamente:
 2. Instala `git`, `curl`, `cron` y `whiptail` (solo si faltan)
 3. Instala **Node.js LTS** vía NodeSource (solo si falta)
 4. Instala **Claude Code** vía `npm install -g @anthropic-ai/claude-code` (solo si falta)
-5. Crea `config.sh` con el horario por defecto (lunes a viernes, 07:00 y 12:00)
+5. Crea `config.sh` con el horario por defecto (lunes a viernes, 07:00 y 12:00; noche desactivada)
 6. Registra los cron jobs
 7. Muestra un resumen
 
@@ -97,8 +98,8 @@ bash update-schedule.sh
 La interfaz gráfica de terminal (whiptail) permite:
 
 - Seleccionar cualquier combinación de días con flechas y Espacio
-- Configurar la hora y minuto de la sesión matutina
-- Configurar la hora y minuto de la sesión vespertina
+- Activar o desactivar cada sesión (mañana, tarde, noche) de forma independiente
+- Configurar la hora y minuto de cada sesión activa
 - Confirmar antes de aplicar
 
 Los cambios se escriben en `config.sh` y el crontab se actualiza de inmediato, sin pasos adicionales.
@@ -125,13 +126,18 @@ Los cambios se escriben en `config.sh` y el crontab se actualiza de inmediato, s
 cat sessions.log
 ```
 
-Ejemplo de salida:
+Cada línea indica de qué sesión proviene mediante una etiqueta entre corchetes (`[MORNING]`, `[AFTERNOON]`, `[NIGHT]`):
 
 ```
-[2026-05-28 07:00:01] Starting session reset
-[2026-05-28 07:00:03] Reset: Session initialized...
-[2026-05-28 07:00:05] Work:  Session active...
-[2026-05-28 07:00:05] Session complete
+[2026-05-28 07:00:01] [MORNING] Starting session reset
+[2026-05-28 07:00:03] [MORNING] Reset: Session initialized...
+[2026-05-28 07:00:05] [MORNING] Work:  Session active...
+[2026-05-28 07:00:05] [MORNING] Session complete
+---
+[2026-05-28 12:00:01] [AFTERNOON] Starting session reset
+[2026-05-28 12:00:03] [AFTERNOON] Reset: Session initialized...
+[2026-05-28 12:00:05] [AFTERNOON] Work:  Session active...
+[2026-05-28 12:00:05] [AFTERNOON] Session complete
 ---
 ```
 
@@ -174,13 +180,18 @@ LANGUAGE="es"   # o "en"
 `config.sh` se crea automáticamente. Puedes editarlo directamente o usar `update-schedule.sh`.
 
 ```bash
-LANGUAGE="es"         # es o en
-MORNING_HOUR=7        # 0–23
-MORNING_MINUTE=0      # 0–59
-AFTERNOON_HOUR=12     # 0–23
-AFTERNOON_MINUTE=0    # 0–59
-WEEKDAYS="1,2,3,4,5" # 0=Dom 1=Lun 2=Mar 3=Mié 4=Jue 5=Vie 6=Sáb
-MAX_LOG_LINES=200     # el log se recorta al alcanzar este número de líneas
+LANGUAGE="es"           # es o en
+MORNING_HOUR=7          # 0–23
+MORNING_MINUTE=0        # 0–59
+MORNING_ENABLED=true    # activa/desactiva la sesión matutina
+AFTERNOON_HOUR=12       # 0–23
+AFTERNOON_MINUTE=0      # 0–59
+AFTERNOON_ENABLED=true  # activa/desactiva la sesión vespertina
+NIGHT_HOUR=17           # 0–23
+NIGHT_MINUTE=0          # 0–59
+NIGHT_ENABLED=false     # activa/desactiva la sesión nocturna (por defecto desactivada)
+WEEKDAYS="1,2,3,4,5"   # 0=Dom 1=Lun 2=Mar 3=Mié 4=Jue 5=Vie 6=Sáb
+MAX_LOG_LINES=200       # el log se recorta al alcanzar este número de líneas
 ```
 
 ---
@@ -201,10 +212,10 @@ El instalador necesita sudo para instalar paquetes. Verifica que tu usuario teng
 
 ### El log está vacío
 
-El cron aún no se ha ejecutado. Prueba manualmente:
+El cron aún no se ha ejecutado. Prueba manualmente pasando el tipo de sesión:
 
 ```bash
-bash session-starter.sh
+bash session-starter.sh morning
 ```
 
 ### Error de autenticación en el log
