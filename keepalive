@@ -118,7 +118,6 @@ login() {
         claude) exec "$SCRIPT_DIR/login.sh" ;;
         codex) exec codex login --device-auth ;;
         opencode) exec opencode auth login ;;
-        gemini|qwen) exec "$agent" ;;
         *) echo "agent?: $AGENTS_KNOWN"; return 1 ;;
     esac
 }
