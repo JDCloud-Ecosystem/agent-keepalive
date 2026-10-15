@@ -55,20 +55,29 @@ El instalador hace todo automáticamente:
 7. Registra los cron jobs
 8. Muestra un resumen
 
-> **En Guacamole:** usa **Ctrl+Alt+Shift** para abrir el panel lateral, sube los archivos via "Devices → Upload Files", y luego ejecuta `bash install.sh` en la terminal SSH.
-
 ---
 
 ## Primer inicio de sesión (obligatorio)
 
-El instalador no puede autenticarte automáticamente. Al terminar `install.sh`, ejecuta cada herramienta que vayas a usar:
+El instalador no puede autenticarte automáticamente. Al terminar `install.sh`, conecta cada herramienta que vayas a usar:
 
 ```bash
-claude login   # Autenticar Claude Code
-codex login    # Autenticar Codex (solo si lo vas a usar)
+~/projects/claude-keepalive/login.sh   # Claude Code, por un año y sin volver a iniciar sesión
+codex login --device-auth              # Codex (solo si lo vas a usar); funciona sin navegador en el servidor
 ```
 
-Las credenciales se guardan en sus respectivos directorios de configuración y son privadas para tu usuario.
+**Por qué `login.sh` y no `claude login`.** `claude login` guarda una sesión corta que se renueva sola.
+Si dos procesos la renuevan a la vez, como el cron y una terminal abierta, o si una renovación falla,
+Claude la borra y hay que volver a iniciar sesión. En el registro aparece como `OAuth session expired
+and could not be refreshed`. `login.sh` usa `claude setup-token`, que entrega un token de un año que
+nunca se renueva, así que nada puede romperlo:
+
+1. Abre el inicio de sesión de Claude; abres el enlace en tu navegador y pegas el código.
+2. Guarda solo el token en `.claude-token`, legible únicamente por tu usuario, y comprueba que funcione.
+3. Hace que el cron y cada terminal nueva lo usen, con una línea en `~/.bashrc`.
+
+`test.sh` avisa cuando faltan menos de 30 días para que venza; entonces basta con volver a correr
+`login.sh`.
 
 ---
 
@@ -115,12 +124,14 @@ Los cambios se escriben en `config.sh` y el crontab se actualiza de inmediato, s
 | -------------------- | -------- | ---------------------------------------------------------- |
 | `install.sh`         | repo     | Instalador principal — ejecutar una vez                    |
 | `session-starter.sh` | repo     | Script que ejecuta cron (no eliminar)                      |
+| `login.sh`           | repo     | Conecta Claude por un año con `claude setup-token`         |
 | `update-schedule.sh` | repo     | Editor de horario con TUI                                  |
 | `test.sh`            | repo     | Smoke test                                                 |
 | `uninstall.sh`       | repo     | Elimina todo                                               |
 | `config.sh`          | generado | Configuración de horario e idioma (ignorado por git)       |
 | `sessions.log`       | generado | Log de Claude, rotación automática (ignorado por git)      |
 | `codex-sessions.log` | generado | Log de Codex, rotación automática (ignorado por git)       |
+| `.claude-token`      | generado | Token de un año de Claude, solo para tu usuario (ignorado) |
 
 ---
 
@@ -223,7 +234,10 @@ Para ver los logs de Codex:
 cat codex-sessions.log
 ```
 
-> **Nota sobre la sintaxis de Codex:** `session-starter.sh` llama a Codex con `codex "mensaje"`. Si tu versión del CLI requiere flags diferentes (por ejemplo `--approval-mode full-auto`), edita la sección `codex` en `session-starter.sh` según corresponda.
+`session-starter.sh` llama a Codex con `codex exec --skip-git-repo-check -s read-only`, el modo sin
+terminal que necesita el cron. Llamarlo como `codex "mensaje"` abre su interfaz interactiva, que en el
+cron falla con `Error: stdin is not a terminal`. Si Codex no tiene sesión iniciada, el registro lo dice
+en una línea, sin reintentos.
 
 ---
 
@@ -251,10 +265,12 @@ bash session-starter.sh morning
 
 ### Error de autenticación en el log
 
-Necesitas iniciar sesión primero:
+Cada ejecución termina en el log con `OK` o con un `ERROR` que dice qué hacer. Si es la sesión de
+Claude, conéctalo por un año; si es Codex, inicia su sesión:
 
 ```bash
-claude login
+~/projects/claude-keepalive/login.sh
+codex login --device-auth
 ```
 
 ### Cron no se ejecuta

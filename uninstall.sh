@@ -101,7 +101,9 @@ else
     echo "  • $T_CRON_NONE"
 fi
 
-# 2. Generated files
+# 2. Generated files, the year-long Claude token and its line in ~/.bashrc
+sed -i '/# >>> claude-keepalive token >>>/,/# <<< claude-keepalive token <<</d' "$HOME/.bashrc" 2>/dev/null || true
+rm -f "$SCRIPT_DIR/.claude-token" "$SCRIPT_DIR/.claude-token.created"
 rm -f "$CONFIG_FILE" \
       "$LOG_FILE"       "${LOG_FILE}.old"       "${LOG_FILE}.tmp" \
       "$CODEX_LOG_FILE" "${CODEX_LOG_FILE}.old" "${CODEX_LOG_FILE}.tmp"

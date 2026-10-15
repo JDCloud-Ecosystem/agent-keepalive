@@ -86,7 +86,7 @@ if [[ "$LANGUAGE" == "es" ]]; then
     S_CONFIG="Creando configuración"
     S_CRON="Configurando crontab"
     S_DONE="── ¡Instalación Completada! — Claude Session ──"
-    S_LOGIN_WARN="Inicia sesión en Claude con:  claude login"
+    S_LOGIN_WARN="Conecta Claude por un año, sin volver a iniciar sesión:  ~/projects/claude-keepalive/login.sh"
     S_TEST_CMD="  Prueba:           bash test.sh"
     S_SCHED_CMD="  Editar horario:   bash update-schedule.sh"
     S_M_FMT="  Mañana:           %02d:%02d"
@@ -109,7 +109,7 @@ else
     S_CONFIG="Creating configuration"
     S_CRON="Setting up crontab"
     S_DONE="── Installation Complete! — Claude Session ──"
-    S_LOGIN_WARN="Log in to Claude with:  claude login"
+    S_LOGIN_WARN="Connect Claude for a year, with no further logins:  ~/projects/claude-keepalive/login.sh"
     S_TEST_CMD="  Test:             bash test.sh"
     S_SCHED_CMD="  Edit schedule:    bash update-schedule.sh"
     S_M_FMT="  Morning:          %02d:%02d"
@@ -227,6 +227,7 @@ chmod +x "$SESSION_FILE"                          2>/dev/null || true
 chmod +x "$SCRIPT_DIR/update-schedule.sh"         2>/dev/null || true
 chmod +x "$SCRIPT_DIR/test.sh"                    2>/dev/null || true
 chmod +x "$SCRIPT_DIR/uninstall.sh"               2>/dev/null || true
+chmod +x "$SCRIPT_DIR/login.sh"                   2>/dev/null || true
 
 # Ignore fileMode changes so git pull works cleanly after chmod
 git -C "$SCRIPT_DIR" config core.fileMode false 2>/dev/null || true

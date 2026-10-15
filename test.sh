@@ -67,6 +67,12 @@ if [[ "$LANGUAGE" == "es" ]]; then
     T_ALL_OK="── Todas las Pruebas Pasaron — Claude Session ──"
     T_FAIL_S="── %d Prueba(s) Fallaron — Claude Session ──"
     T_LOGIN="Inicia sesión en Claude:  claude login"
+    T_TOKEN="Claude conectado por un año"
+    T_TOKEN_F="Claude sin token de un año: ejecuta ~/projects/claude-keepalive/login.sh para no volver a iniciar sesión"
+    T_TOKEN_SOON="El token de Claude vence pronto: ejecuta login.sh"
+    T_DAYS="días"
+    T_CODEX="Codex con sesión iniciada"
+    T_CODEX_F="Codex sin sesión: ejecuta codex login --device-auth"
 else
     T_TITLE="── Smoke Test — Claude Session ──"
     T_OS="OS: Linux"
@@ -85,6 +91,12 @@ else
     T_ALL_OK="── All Tests Passed — Claude Session ──"
     T_FAIL_S="── %d Test(s) Failed — Claude Session ──"
     T_LOGIN="Log in to Claude:  claude login"
+    T_TOKEN="Claude connected for a year"
+    T_TOKEN_F="No year-long Claude token: run ~/projects/claude-keepalive/login.sh to never log in again"
+    T_TOKEN_SOON="The Claude token expires soon: run login.sh"
+    T_DAYS="days"
+    T_CODEX="Codex is logged in"
+    T_CODEX_F="Codex is not logged in: run codex login --device-auth"
 fi
 
 _ok()   { echo "  ✓ $*"; (( PASS++ )) || true; }
@@ -106,6 +118,22 @@ if command -v claude >/dev/null 2>&1; then
     _ok "$T_CLAUDE: $(claude --version 2>/dev/null | head -1)"
 else
     _fail "$T_CLAUDE_F"
+fi
+
+# 3b. Year-long Claude token and Codex login
+if [[ -s "$SCRIPT_DIR/.claude-token" ]]; then
+    CREATED=$(cat "$SCRIPT_DIR/.claude-token.created" 2>/dev/null || echo "")
+    if [[ -n "$CREATED" ]]; then
+        LEFT=$(( ( $(date -d "$CREATED +1 year" +%s) - $(date +%s) ) / 86400 ))
+        (( LEFT > 30 )) && _ok "$T_TOKEN ($LEFT $T_DAYS)" || _fail "$T_TOKEN_SOON ($LEFT $T_DAYS)"
+    else
+        _ok "$T_TOKEN"
+    fi
+else
+    _info "$T_TOKEN_F"
+fi
+if [[ "${CODEX_ENABLED:-false}" == "true" ]]; then
+    [[ -s "${CODEX_HOME:-$HOME/.codex}/auth.json" ]] && _ok "$T_CODEX" || _fail "$T_CODEX_F"
 fi
 
 # 4. config.sh
