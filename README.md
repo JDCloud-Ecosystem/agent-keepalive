@@ -34,13 +34,27 @@ Después conecta tus agentes, como se explica abajo.
 
 | Comando                   | Qué hace                                                        |
 | ------------------------- | --------------------------------------------------------------- |
-| `keepalive status`        | Qué agentes participan, si tienen sesión y cómo salió el último envío |
+| `keepalive status`        | Cada agente con su etiqueta de color, su cuenta y su último envío |
 | `keepalive login [agente]`| Conecta un agente; sin nombre, pregunta cuál                    |
 | `keepalive schedule`      | Cambia las horas, los días y qué agentes reciben el envío       |
 | `keepalive test`          | Hace un envío real a cada agente elegido y revisa el resultado  |
 | `keepalive log [agente]`  | Muestra los últimos envíos                                      |
 | `keepalive update`        | Baja la versión más reciente sin tocar tu horario               |
 | `keepalive uninstall`     | Quita el cron, la configuración y el comando                    |
+
+En `keepalive status` la etiqueta de cada agente dice de un vistazo cómo va:
+
+| Etiqueta     | Color    | Significa                                                     |
+| ------------ | -------- | ------------------------------------------------------------- |
+| `OK`         | verde    | Tiene sesión y el último envío salió bien                     |
+| `FALLÓ`      | rojo     | El último envío falló o el agente no está instalado           |
+| `SIN SESIÓN` | rojo     | Falta conectarlo; al lado aparece el comando                  |
+| `LÍMITE`     | amarillo | La cuenta llegó a su límite semanal y se libera sola          |
+| `ESPERA`     | cian     | Tiene sesión, pero todavía no le toca su primer envío         |
+| `FUERA`      | gris     | No participa en la sesión automática                          |
+
+Debajo de cada agente aparece su cuenta: el correo y el plan para Claude y Codex, y el proveedor para
+OpenCode.
 
 ---
 
@@ -66,6 +80,14 @@ de un año que nunca se renueva, así que nada lo rompe. Abre el inicio de sesi�
 el token en `~/.config/agent-keepalive/` (legible únicamente por ti), comprueba que funcione y hace que
 el cron y cada terminal nueva lo usen. Un mes antes de que venza, `keepalive status` y `keepalive test`
 lo avisan, y basta con volver a correr el mismo comando.
+
+El token no dice de qué cuenta es, así que al final el comando pregunta con qué correo entraste y lo anota
+en `~/.config/agent-keepalive/claude-account` para que `keepalive status` lo muestre. Si en esa máquina ya
+hubo un `claude login`, ofrece esa cuenta y basta con pulsar Enter.
+
+Codex y OpenCode no necesitan nada parecido. Codex guarda una sesión de ChatGPT que se renueva sola cada
+vez que corre, y como el cron lo usa a diario no llega a caducar. OpenCode con OpenCode Zen entra con una
+llave de API, que no vence.
 
 ---
 

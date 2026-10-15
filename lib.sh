@@ -5,6 +5,7 @@
 AGENTS_KNOWN="claude codex opencode"
 STATE_DIR="$HOME/.config/agent-keepalive"
 CLAUDE_TOKEN="$STATE_DIR/claude-token"
+CLAUDE_ACCOUNT="$STATE_DIR/claude-account"  # the token carries no account details, so login.sh writes it here
 SESSION_FILE="$SCRIPT_DIR/session-starter.sh"
 CONFIG_FILE="$SCRIPT_DIR/config.sh"
 export PATH="$HOME/.local/bin:$HOME/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
