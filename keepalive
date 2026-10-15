@@ -22,9 +22,14 @@ if [[ "${LANGUAGE:-es}" == "es" ]]; then
     T_DAYS=("domingo" "lunes" "martes" "miércoles" "jueves" "viernes" "sábado")
     T_ON="en la sesión automática"; T_NOT_ON="fuera de la sesión automática"
     T_NOT_INSTALLED="no instalado"; T_NO_LOGIN="falta iniciar sesión"; T_LOGIN_OK="con sesión"
-    T_YEAR="conectado por un año, hasta el"; T_LAST="último envío"; T_NEVER="todavía ninguno"
+    T_YEAR="conectado hasta el"; T_LAST="último envío"; T_NEVER="todavía ninguno"
     T_RUN_OK="salió bien"; T_RUN_LIMIT="la ventana ya estaba abierta"; T_RUN_ERROR="falló"; T_FIX="para arreglarlo"
     T_RUN_WEEKLY="la cuenta llegó a su límite semanal"
+    T_ACCOUNT="cuenta"; T_NO_ACCOUNT="ninguna"; T_API_KEY="llave de API"
+    T_UNKNOWN="sin anotar; vuelve a conectar con keepalive login claude para verla aquí"
+    # Tags in front of each agent, all ten columns wide
+    T_B_OK="    OK    "; T_B_FAIL="  FALLÓ   "; T_B_LOGIN="SIN SESIÓN"; T_B_LIMIT="  LÍMITE  "; T_B_WAIT="  ESPERA  "
+    T_B_OFF="  FUERA   "
     T_MENU="¿Qué quieres hacer?"; T_M_STATUS="Ver el estado"; T_M_LOGIN="Conectar un agente"
     T_M_SCHEDULE="Cambiar el horario y los agentes"; T_M_TEST="Probar ahora"; T_M_LOG="Ver el historial"
     T_M_UPDATE="Actualizar agent-keepalive"; T_WHICH="¿Qué agente conectas?"; T_UPDATED="Actualizado; tu horario sigue igual."
@@ -35,9 +40,13 @@ else
     T_DAYS=("Sunday" "Monday" "Tuesday" "Wednesday" "Thursday" "Friday" "Saturday")
     T_ON="in the automatic session"; T_NOT_ON="not in the automatic session"
     T_NOT_INSTALLED="not installed"; T_NO_LOGIN="needs a login"; T_LOGIN_OK="logged in"
-    T_YEAR="connected for a year, until"; T_LAST="last run"; T_NEVER="none yet"
+    T_YEAR="connected until"; T_LAST="last run"; T_NEVER="none yet"
     T_RUN_OK="went fine"; T_RUN_LIMIT="the window was already open"; T_RUN_ERROR="failed"; T_FIX="to fix it"
     T_RUN_WEEKLY="the account reached its weekly limit"
+    T_ACCOUNT="account"; T_NO_ACCOUNT="none"; T_API_KEY="API key"
+    T_UNKNOWN="not noted; reconnect with keepalive login claude to see it here"
+    T_B_OK="    OK    "; T_B_FAIL="  FAILED  "; T_B_LOGIN=" NO LOGIN "; T_B_LIMIT="  LIMIT   "; T_B_WAIT="   WAIT   "
+    T_B_OFF="   OFF    "
     T_MENU="What do you want to do?"; T_M_STATUS="See the status"; T_M_LOGIN="Connect an agent"
     T_M_SCHEDULE="Change the schedule and agents"; T_M_TEST="Test now"; T_M_LOG="See the history"
     T_M_UPDATE="Update agent-keepalive"; T_WHICH="Which agent do you connect?"; T_UPDATED="Updated; your schedule stays the same."
@@ -68,41 +77,120 @@ _join() {  # a, b and c
     echo "$out"
 }
 
-_last_run() {
+_last_run() {  # prints "result|text", result being ok, limit, weekly, error or never
     local line when fix
     line=$(grep -sE '\] (OK|LIMIT|ERROR)' "$(agent_log "$1")" | tail -1)
-    [[ -z "$line" ]] && { echo "$T_NEVER"; return; }
+    [[ -z "$line" ]] && { echo "never|$T_NEVER"; return; }
     when=$(echo "$line" | sed -E 's/^\[[0-9]{4}-([0-9]{2})-([0-9]{2}) ([0-9]{2}:[0-9]{2}).*/\2\/\1 \3/')
     case "$line" in
-        *"] OK"*) echo "$when, $T_RUN_OK" ;;
-        *"] LIMIT (weekly"*) echo "$when, $T_RUN_WEEKLY" ;;
-        *"] LIMIT"*) echo "$when, $T_RUN_LIMIT" ;;
+        *"] OK"*) echo "ok|$when, $T_RUN_OK" ;;
+        *"] LIMIT (weekly"*) echo "weekly|$when, $T_RUN_WEEKLY" ;;
+        *"] LIMIT"*) echo "limit|$when, $T_RUN_LIMIT" ;;
         *)
             fix=$(echo "$line" | sed -nE 's/.*run: ([^|]*).*/\1/p' | sed 's/ *$//')
-            echo "$when, $T_RUN_ERROR${fix:+; $T_FIX: $fix}" ;;
+            echo "error|$when, $T_RUN_ERROR${fix:+; $T_FIX: $fix}" ;;
     esac
+}
+
+_badge() {  # background color code, then the label: black text on a colored block
+    printf '\033[30;%sm%s\033[0m' "$1" "$2"
+}
+
+# Who an agent is connected as: the email and plan when the agent keeps them, otherwise its provider.
+# Claude's year token carries no account details, so for it this reads what login.sh wrote down.
+_account() {
+    if [[ "$1" == "claude" && -s "$CLAUDE_TOKEN" ]]; then
+        cat "$CLAUDE_ACCOUNT" 2>/dev/null || echo "$T_UNKNOWN"
+        return
+    fi
+    command -v python3 >/dev/null || return 0
+    python3 - "$1" "$T_API_KEY" 2>/dev/null <<'PY'
+import base64, json, os, sys
+agent, api_key = sys.argv[1:3]
+home = os.path.expanduser("~")
+
+
+def load(path):
+    try:
+        return json.load(open(path))
+    except Exception:
+        return {}
+
+
+def claims(token):
+    try:
+        body = token.split(".")[1]
+        return json.loads(base64.urlsafe_b64decode(body + "=" * (-len(body) % 4)))
+    except Exception:
+        return {}
+
+
+def with_plan(email, plan):
+    return f"{email} ({plan.capitalize()})" if email and plan else email
+
+
+if agent == "claude":
+    email = (load(f"{home}/.claude.json").get("oauthAccount") or {}).get("emailAddress") or ""
+    plan = (load(f"{home}/.claude/.credentials.json").get("claudeAiOauth") or {}).get("subscriptionType") or ""
+    print(with_plan(email, plan))
+elif agent == "codex":
+    auth = load(os.path.join(os.environ.get("CODEX_HOME") or f"{home}/.codex", "auth.json"))
+    found = claims((auth.get("tokens") or {}).get("id_token") or "")
+    plan = (found.get("https://api.openai.com/auth") or {}).get("chatgpt_plan_type") or ""
+    print(with_plan(found.get("email") or "", plan) or (api_key if auth.get("OPENAI_API_KEY") else ""))
+elif agent == "opencode":
+    auth = load(os.path.join(os.environ.get("XDG_DATA_HOME") or f"{home}/.local/share", "opencode", "auth.json"))
+    names = {"opencode": "OpenCode Zen", "anthropic": "Anthropic", "openai": "OpenAI",
+             "github-copilot": "GitHub Copilot", "google": "Google"}
+    shown = []
+    for provider, entry in auth.items():
+        found = claims(entry.get("access") or "")
+        detail = found.get("email") or (found.get("https://api.openai.com/profile") or {}).get("email") \
+            or (api_key if entry.get("type") == "api" else "")
+        shown.append(names.get(provider, provider) + (f", {detail}" if detail else ""))
+    print("; ".join(shown))
+PY
 }
 
 status() {
     printf '\n\033[1;36m%s\033[0m\n' "$T_TITLE"
     printf '%s: %s\n\n' "$T_SCHEDULE" "$(_hours)"
-    local agent state
+    local agent state ready run badge account
     for agent in $AGENTS_KNOWN; do
+        ready=false
         if ! agent_installed "$agent"; then
             [[ " $AGENTS " == *" $agent "* ]] || continue
             state="$T_NOT_INSTALLED"
         elif [[ "$agent" == "claude" && -s "$CLAUDE_TOKEN" ]]; then
             state="$T_YEAR $(date -d "$(cat "$CLAUDE_TOKEN.created" 2>/dev/null || date +%F) +1 year" '+%d/%m/%Y')"
+            ready=true
         elif agent_logged_in "$agent"; then
             state="$T_LOGIN_OK"
+            ready=true
         else
             state="$T_NO_LOGIN: $(agent_login_command "$agent")"
         fi
-        if [[ " $AGENTS " == *" $agent "* ]]; then
-            printf '\033[1;32m%-12s\033[0m %s, %s.\n             %s: %s\n' "$(agent_title "$agent")" "$T_ON" "$state" "$T_LAST" "$(_last_run "$agent")"
-        else
-            printf '\033[0;37m%-12s %s, %s.\033[0m\n' "$(agent_title "$agent")" "$T_NOT_ON" "$state"
+        account=$(agent_installed "$agent" && _account "$agent")
+        if [[ " $AGENTS " != *" $agent "* ]]; then
+            printf '%s \033[0;37m%-12s %s, %s.\n%24s%s: %s\033[0m\n' "$(_badge 47 "$T_B_OFF")" "$(agent_title "$agent")" \
+                "$T_NOT_ON" "$state" "" "$T_ACCOUNT" "${account:-$T_NO_ACCOUNT}"
+            continue
         fi
+        run=$(_last_run "$agent")
+        if ! agent_installed "$agent"; then
+            badge=$(_badge 41 "$T_B_FAIL")
+        elif [[ "$ready" == false ]]; then
+            badge=$(_badge 41 "$T_B_LOGIN")
+        else
+            case "${run%%|*}" in
+                error) badge=$(_badge 41 "$T_B_FAIL") ;;
+                weekly) badge=$(_badge 43 "$T_B_LIMIT") ;;
+                never) badge=$(_badge 46 "$T_B_WAIT") ;;
+                *) badge=$(_badge 42 "$T_B_OK") ;;
+            esac
+        fi
+        printf '%s \033[1m%-12s\033[0m %s, %s.\n%24s%s: %s\n%24s%s: %s\n' "$badge" "$(agent_title "$agent")" \
+            "$T_ON" "$state" "" "$T_ACCOUNT" "${account:-$T_NO_ACCOUNT}" "" "$T_LAST" "${run#*|}"
     done
     echo ""
 }
@@ -126,7 +214,9 @@ history() {
     local agent
     for agent in ${1:-$AGENTS}; do
         printf '\n\033[1;33m%s\033[0m\n' "$(agent_title "$agent")"
-        grep -sE '\] (OK|LIMIT|ERROR)' "$(agent_log "$agent")" | tail -n 8 || echo "  $T_NEVER"
+        grep -sE '\] (OK|LIMIT|ERROR)' "$(agent_log "$agent")" | tail -n 8 \
+            | sed -E $'s/\\] OK/] \e[1;32mOK\e[0m/; s/\\] LIMIT/] \e[1;33mLIMIT\e[0m/; s/\\] ERROR/] \e[1;31mERROR\e[0m/' \
+            || echo "  $T_NEVER"
     done
     echo ""
 }
