@@ -1,16 +1,16 @@
 #!/bin/bash
 # Connects Claude Code to this machine for a year, so neither the cron nor the terminal needs `claude login` again.
+# Run it as `keepalive login claude`.
 #
 # `claude login` keeps a short session that renews itself; when two processes renew it at once, or a renewal
 # fails, Claude blanks it and asks to log in again. `claude setup-token` instead issues a token that lasts a
-# year and never renews, so nothing can break it. This script runs it, keeps only the token in .claude-token
-# (readable by you alone), checks it works, and makes every new terminal use it.
+# year and never renews, so nothing can break it. This script runs it, keeps only the token (readable by you
+# alone, in ~/.config/agent-keepalive), checks it works, and makes every new terminal use it.
 set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CONFIG_FILE="$SCRIPT_DIR/config.sh"
-TOKEN_FILE="$SCRIPT_DIR/.claude-token"
-[[ -f "$CONFIG_FILE" ]] && source "$CONFIG_FILE"
-export PATH="$HOME/.local/bin:$HOME/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
+# shellcheck source=lib.sh
+source "$SCRIPT_DIR/lib.sh"
+load_config
 
 if [[ "${LANGUAGE:-es}" == "es" ]]; then
     T_TITLE="── Conectar Claude por un año ──"
@@ -32,7 +32,7 @@ else
     T_NOTE="New terminals use it already; in this one run: source ~/.bashrc"
 fi
 
-command -v claude >/dev/null 2>&1 || { echo "ERROR: claude not found — run install.sh"; exit 1; }
+agent_installed claude || { echo "ERROR: claude not found — run install.sh"; exit 1; }
 umask 077
 CAPTURE=$(mktemp)
 trap 'shred -u "$CAPTURE" 2>/dev/null || rm -f "$CAPTURE"' EXIT
@@ -55,20 +55,11 @@ if [[ -z "$TOKEN" ]] || ! _works "$TOKEN"; then
     _works "$TOKEN" || { echo "$T_FAIL"; exit 1; }
 fi
 
-printf '%s' "$TOKEN" > "$TOKEN_FILE"
-chmod 600 "$TOKEN_FILE"
-date '+%Y-%m-%d' > "$TOKEN_FILE.created"
-
-# Every new terminal of this user uses the token too, so the interactive login cannot break either.
-BLOCK_START="# >>> claude-keepalive token >>>"
-if ! grep -qF "$BLOCK_START" "$HOME/.bashrc" 2>/dev/null; then
-    {
-        echo ""
-        echo "$BLOCK_START"
-        echo "[ -s \"$TOKEN_FILE\" ] && export CLAUDE_CODE_OAUTH_TOKEN=\"\$(cat \"$TOKEN_FILE\")\""
-        echo "# <<< claude-keepalive token <<<"
-    } >> "$HOME/.bashrc"
-fi
+mkdir -p "$STATE_DIR" && chmod 700 "$STATE_DIR"
+printf '%s' "$TOKEN" > "$CLAUDE_TOKEN"
+chmod 600 "$CLAUDE_TOKEN"
+date '+%Y-%m-%d' > "$CLAUDE_TOKEN.created"
+migrate_token
 
 echo ""
 printf "\033[1;32m$T_OK\033[0m\n" "$(date -d '+1 year' '+%Y-%m-%d')"

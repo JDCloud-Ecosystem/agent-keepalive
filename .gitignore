@@ -7,3 +7,6 @@ codex-sessions.log.old
 codex-sessions.log.tmp
 .claude-token
 .claude-token.created
+*-sessions.log
+*-sessions.log.old
+*-sessions.log.tmp

@@ -1,78 +1,61 @@
 #!/bin/bash
-# Sends one short message to Claude Code or Codex so the 5-hour usage window starts now.
-#   session-starter.sh <morning|afternoon|night> [claude|codex]
-# Claude uses the year-long token from login.sh when there is one, so the cron never renews (and never breaks)
-# the interactive login. Codex runs headless with `codex exec`. Every run ends in the log as OK or ERROR.
+# Sends one short message to an AI agent so its usage window starts now. Cron runs it.
+#   session-starter.sh <morning|afternoon|night> [claude|codex|opencode|gemini|qwen]
+# Each agent runs in its own non-interactive mode. Claude uses the year-long token from `keepalive login claude`
+# when there is one, so the cron never renews (and never breaks) a login. Every run ends in the agent's log as
+# OK, LIMIT (a window was already open) or an ERROR that says what to run.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CONFIG_FILE="$SCRIPT_DIR/config.sh"
-TOKEN_FILE="$SCRIPT_DIR/.claude-token"
-
-[[ -f "$CONFIG_FILE" ]] && source "$CONFIG_FILE"
-export PATH="$HOME/.local/bin:$HOME/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
+# shellcheck source=lib.sh
+source "$SCRIPT_DIR/lib.sh"
+load_config
+migrate_token
 
 MAX_LINES="${MAX_LOG_LINES:-200}"
 TS=$(date '+%Y-%m-%d %H:%M:%S')
 SESSION_TYPE="${1:-morning}"
-TOOL="${2:-claude}"
+AGENT="${2:-claude}"
 PROMPT="Keepalive check. Reply with the single word OK."
+LOG_FILE="$(agent_log "$AGENT")"
 
 case "$SESSION_TYPE" in
-    morning)   SESSION_LABEL="MORNING"   ;;
-    afternoon) SESSION_LABEL="AFTERNOON" ;;
-    night)     SESSION_LABEL="NIGHT"     ;;
-    *)         SESSION_LABEL="SESSION"   ;;
+    morning) SESSION_LABEL="MORNING" ;; afternoon) SESSION_LABEL="AFTERNOON" ;;
+    night) SESSION_LABEL="NIGHT" ;; *) SESSION_LABEL="SESSION" ;;
 esac
 
-case "$TOOL" in
-    codex) LOG_FILE="$SCRIPT_DIR/codex-sessions.log"; TOOL_CMD=$(command -v codex 2>/dev/null || echo "") ;;
-    *)     LOG_FILE="$SCRIPT_DIR/sessions.log";       TOOL_CMD=$(command -v claude 2>/dev/null || echo "") ;;
-esac
-
-_rotate() {
-    [[ ! -f "$LOG_FILE" ]] && return
-    local lines
-    lines=$(wc -l < "$LOG_FILE" 2>/dev/null || echo 0)
-    if (( lines >= MAX_LINES )); then
-        tail -n 50 "$LOG_FILE" > "${LOG_FILE}.tmp" && mv "${LOG_FILE}.tmp" "$LOG_FILE"
-    fi
-}
-
-_log() { printf "[%s] [%s] %s\n" "$TS" "$SESSION_LABEL" "$1" >> "$LOG_FILE"; }
+if [[ -f "$LOG_FILE" ]] && (( $(wc -l < "$LOG_FILE") >= MAX_LINES )); then
+    tail -n 50 "$LOG_FILE" > "${LOG_FILE}.tmp" && mv "${LOG_FILE}.tmp" "$LOG_FILE"
+fi
 
 _finish() {
-    _log "$1"
-    echo "---" >> "$LOG_FILE"
+    printf "[%s] [%s] %s\n---\n" "$TS" "$SESSION_LABEL" "$1" >> "$LOG_FILE"
     exit "$2"
 }
 
-_rotate
+[[ " $AGENTS_KNOWN " == *" $AGENT "* ]] || _finish "ERROR: unknown agent $AGENT" 1
+agent_installed "$AGENT" || _finish "ERROR: $(agent_title "$AGENT") is not installed — run: sudo npm install -g $(agent_package "$AGENT")" 1
+agent_logged_in "$AGENT" || _finish "ERROR: $(agent_title "$AGENT") is not logged in — run: $(agent_login_command "$AGENT")" 1
 
-[[ -z "$TOOL_CMD" ]] && _finish "ERROR: $TOOL not found — run install.sh" 1
-
-if [[ "$TOOL" == "codex" ]]; then
-    [[ -s "${CODEX_HOME:-$HOME/.codex}/auth.json" ]] \
-        || _finish "ERROR: Codex is not logged in — run: codex login --device-auth" 1
-    LAST=$(mktemp)
-    RESP=$(cd "$HOME" && timeout 180 "$TOOL_CMD" exec --skip-git-repo-check -s read-only --color never \
-        -o "$LAST" "$PROMPT" </dev/null 2>&1)
-    CODE=$?
-    [[ -s "$LAST" ]] && RESP=$(cat "$LAST")
-    rm -f "$LAST"
-else
-    [[ -s "$TOKEN_FILE" ]] && export CLAUDE_CODE_OAUTH_TOKEN="$(cat "$TOKEN_FILE")"
-    RESP=$(cd "$HOME" && timeout 180 "$TOOL_CMD" -p "$PROMPT" </dev/null 2>&1)
-    CODE=$?
-fi
+LAST=$(mktemp)
+trap 'rm -f "$LAST"' EXIT
+[[ -s "$CLAUDE_TOKEN" ]] && export CLAUDE_CODE_OAUTH_TOKEN="$(cat "$CLAUDE_TOKEN")"
+case "$AGENT" in
+    claude)   COMMAND=(claude -p "$PROMPT") ;;
+    codex)    COMMAND=(codex exec --skip-git-repo-check -s read-only --color never -o "$LAST" "$PROMPT") ;;
+    opencode) COMMAND=(opencode run "$PROMPT") ;;
+    gemini)   COMMAND=(gemini -p "$PROMPT") ;;
+    qwen)     COMMAND=(qwen -p "$PROMPT") ;;
+esac
+RESP=$(cd "$HOME" && timeout 180 "${COMMAND[@]}" </dev/null 2>&1)
+CODE=$?
+[[ -s "$LAST" ]] && RESP=$(cat "$LAST")
 
 ONE_LINE=$(printf '%s' "$RESP" | tr '\n' ' ' | sed 's/  */ /g')
-if printf '%s' "$RESP" | grep -qiE 'failed to authenticate|oauth|401|unauthorized|not logged in|please run .*login|invalid api key'; then
-    if [[ "$TOOL" == "codex" ]]; then
-        _finish "ERROR: Codex login expired — run: codex login --device-auth | ${ONE_LINE:0:100}" 1
-    fi
-    _finish "ERROR: Claude login expired — run: ~/projects/claude-keepalive/login.sh | ${ONE_LINE:0:100}" 1
+if printf '%s' "$RESP" | grep -qiE 'failed to authenticate|oauth|401|unauthorized|not logged in|please (run|log)|invalid api key|re-?authenticate'; then
+    _finish "ERROR: $(agent_title "$AGENT") login expired — run: $(agent_login_command "$AGENT") | ${ONE_LINE:0:100}" 1
 fi
 # A limit means a usage window is already running, which is what this script is for.
-printf '%s' "$RESP" | grep -qiE 'session limit|usage limit|rate limit' && _finish "LIMIT (window already active): ${ONE_LINE:0:110}" 0
-(( CODE == 124 )) && _finish "ERROR: $TOOL did not answer within 3 minutes" 1
+printf '%s' "$RESP" | grep -qiE 'session limit|usage limit|rate limit|quota' \
+    && _finish "LIMIT (window already active): ${ONE_LINE:0:110}" 0
+(( CODE == 124 )) && _finish "ERROR: $(agent_title "$AGENT") did not answer within 3 minutes" 1
 (( CODE != 0 )) && _finish "ERROR ($CODE): ${ONE_LINE:0:140}" 1
 _finish "OK: ${ONE_LINE:0:120}" 0

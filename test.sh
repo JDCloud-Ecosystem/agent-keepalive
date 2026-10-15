@@ -2,9 +2,8 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CONFIG_FILE="$SCRIPT_DIR/config.sh"
-SESSION_FILE="$SCRIPT_DIR/session-starter.sh"
-LOG_FILE="$SCRIPT_DIR/sessions.log"
+# shellcheck source=lib.sh
+source "$SCRIPT_DIR/lib.sh"
 
 PASS=0
 FAIL=0
@@ -50,7 +49,7 @@ fi
 
 # ── String tables ─────────────────────────────────────────────────────────────
 if [[ "$LANGUAGE" == "es" ]]; then
-    T_TITLE="── Prueba de Humo — Claude Session ──"
+    T_TITLE="── Prueba de Humo — agent-keepalive ──"
     T_OS="Sistema operativo: Linux"
     T_OS_F="Requiere Linux — ejecuta este script en tu servidor"
     T_CRON="Servicio cron activo"
@@ -64,17 +63,18 @@ if [[ "$LANGUAGE" == "es" ]]; then
     T_RUNNING="Ejecutando session-starter.sh"
     T_LOG_OK="Log actualizado correctamente"
     T_LOG_F="El log no se actualizó (¿iniciaste sesión con claude login?)"
-    T_ALL_OK="── Todas las Pruebas Pasaron — Claude Session ──"
-    T_FAIL_S="── %d Prueba(s) Fallaron — Claude Session ──"
-    T_LOGIN="Inicia sesión en Claude:  claude login"
+    T_ALL_OK="── Todas las Pruebas Pasaron — agent-keepalive ──"
+    T_FAIL_S="── %d Prueba(s) Fallaron — agent-keepalive ──"
+    T_LOGIN="keepalive login"
     T_TOKEN="Claude conectado por un año"
-    T_TOKEN_F="Claude sin token de un año: ejecuta ~/projects/claude-keepalive/login.sh para no volver a iniciar sesión"
-    T_TOKEN_SOON="El token de Claude vence pronto: ejecuta login.sh"
+    T_TOKEN_SOON="El token de Claude vence pronto: keepalive login claude"
     T_DAYS="días"
-    T_CODEX="Codex con sesión iniciada"
-    T_CODEX_F="Codex sin sesión: ejecuta codex login --device-auth"
+    T_AGENT_OK="instalado y con sesión"
+    T_AGENT_NO_LOGIN="sin sesión: ejecuta"
+    T_AGENT_MISSING="no instalado: ejecuta"
+    T_RUN_AGENT="Enviando a"
 else
-    T_TITLE="── Smoke Test — Claude Session ──"
+    T_TITLE="── Smoke Test — agent-keepalive ──"
     T_OS="OS: Linux"
     T_OS_F="Requires Linux — run this on your server, not Windows"
     T_CRON="Cron service is active"
@@ -88,15 +88,16 @@ else
     T_RUNNING="Running session-starter.sh"
     T_LOG_OK="Log updated successfully"
     T_LOG_F="Log was not updated (did you run: claude login?)"
-    T_ALL_OK="── All Tests Passed — Claude Session ──"
-    T_FAIL_S="── %d Test(s) Failed — Claude Session ──"
-    T_LOGIN="Log in to Claude:  claude login"
+    T_ALL_OK="── All Tests Passed — agent-keepalive ──"
+    T_FAIL_S="── %d Test(s) Failed — agent-keepalive ──"
+    T_LOGIN="keepalive login"
     T_TOKEN="Claude connected for a year"
-    T_TOKEN_F="No year-long Claude token: run ~/projects/claude-keepalive/login.sh to never log in again"
-    T_TOKEN_SOON="The Claude token expires soon: run login.sh"
+    T_TOKEN_SOON="The Claude token expires soon: keepalive login claude"
     T_DAYS="days"
-    T_CODEX="Codex is logged in"
-    T_CODEX_F="Codex is not logged in: run codex login --device-auth"
+    T_AGENT_OK="installed and logged in"
+    T_AGENT_NO_LOGIN="not logged in: run"
+    T_AGENT_MISSING="not installed: run"
+    T_RUN_AGENT="Sending to"
 fi
 
 _ok()   { echo "  ✓ $*"; (( PASS++ )) || true; }
@@ -113,27 +114,21 @@ echo ""
 # 2. Cron
 systemctl is-active cron >/dev/null 2>&1 && _ok "$T_CRON" || _fail "$T_CRON_F"
 
-# 3. Claude
-if command -v claude >/dev/null 2>&1; then
-    _ok "$T_CLAUDE: $(claude --version 2>/dev/null | head -1)"
-else
-    _fail "$T_CLAUDE_F"
-fi
-
-# 3b. Year-long Claude token and Codex login
-if [[ -s "$SCRIPT_DIR/.claude-token" ]]; then
-    CREATED=$(cat "$SCRIPT_DIR/.claude-token.created" 2>/dev/null || echo "")
-    if [[ -n "$CREATED" ]]; then
-        LEFT=$(( ( $(date -d "$CREATED +1 year" +%s) - $(date +%s) ) / 86400 ))
-        (( LEFT > 30 )) && _ok "$T_TOKEN ($LEFT $T_DAYS)" || _fail "$T_TOKEN_SOON ($LEFT $T_DAYS)"
+# 3. Every agent in the automatic session, and the year-long Claude token
+load_config
+for agent in $AGENTS; do
+    if ! agent_installed "$agent"; then
+        _fail "$(agent_title "$agent"): $T_AGENT_MISSING sudo npm install -g $(agent_package "$agent")"
+    elif agent_logged_in "$agent"; then
+        _ok "$(agent_title "$agent"): $T_AGENT_OK"
     else
-        _ok "$T_TOKEN"
+        _fail "$(agent_title "$agent"): $T_AGENT_NO_LOGIN $(agent_login_command "$agent")"
     fi
-else
-    _info "$T_TOKEN_F"
-fi
-if [[ "${CODEX_ENABLED:-false}" == "true" ]]; then
-    [[ -s "${CODEX_HOME:-$HOME/.codex}/auth.json" ]] && _ok "$T_CODEX" || _fail "$T_CODEX_F"
+done
+if [[ -s "$CLAUDE_TOKEN" ]]; then
+    CREATED=$(cat "$CLAUDE_TOKEN.created" 2>/dev/null || date +%F)
+    LEFT=$(( ( $(date -d "$CREATED +1 year" +%s) - $(date +%s) ) / 86400 ))
+    (( LEFT > 30 )) && _ok "$T_TOKEN ($LEFT $T_DAYS)" || _fail "$T_TOKEN_SOON ($LEFT $T_DAYS)"
 fi
 
 # 4. config.sh
@@ -143,15 +138,15 @@ fi
 crontab -l 2>/dev/null | grep -q "session-starter" \
     && _ok "$T_CRONTAB" || _fail "$T_CRONTAB_F"
 
-# 6. Run session-starter and check log
-if [[ -x "$SESSION_FILE" ]]; then
+# 6. One real run per agent, checked in its log
+for agent in $AGENTS; do
+    LOG_FILE="$(agent_log "$agent")"
     echo ""
-    _info "$T_RUNNING..."
-    LOG_BEFORE=$([ -f "$LOG_FILE" ] && wc -l < "$LOG_FILE" || echo 0)
-    bash "$SESSION_FILE" morning 2>&1 | sed 's/^/    /'
-    LOG_AFTER=$([ -f "$LOG_FILE" ] && wc -l < "$LOG_FILE" || echo 0)
-    (( LOG_AFTER > LOG_BEFORE )) && _ok "$T_LOG_OK" || _fail "$T_LOG_F"
-fi
+    _info "$T_RUN_AGENT $(agent_title "$agent")..."
+    bash "$SESSION_FILE" morning "$agent" >/dev/null 2>&1
+    LAST=$(grep -sE '\] (OK|LIMIT|ERROR)' "$LOG_FILE" | tail -1)
+    [[ "$LAST" =~ \]\ (OK|LIMIT) ]] && _ok "${LAST#*] [*] }" || _fail "${LAST#*] [*] }"
+done
 
 echo ""
 if (( FAIL == 0 )); then

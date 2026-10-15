@@ -2,8 +2,8 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CONFIG_FILE="$SCRIPT_DIR/config.sh"
-SESSION_FILE="$SCRIPT_DIR/session-starter.sh"
+# shellcheck source=lib.sh
+source "$SCRIPT_DIR/lib.sh"
 
 # ── OS / apt check ────────────────────────────────────────────────────────────
 if [[ "$(uname -s)" != "Linux" ]]; then
@@ -85,10 +85,10 @@ if [[ "$LANGUAGE" == "es" ]]; then
     S_CLAUDE_FOUND="Claude Code encontrado"
     S_CONFIG="Creando configuración"
     S_CRON="Configurando crontab"
-    S_DONE="── ¡Instalación Completada! — Claude Session ──"
-    S_LOGIN_WARN="Conecta Claude por un año, sin volver a iniciar sesión:  ~/projects/claude-keepalive/login.sh"
-    S_TEST_CMD="  Prueba:           bash test.sh"
-    S_SCHED_CMD="  Editar horario:   bash update-schedule.sh"
+    S_DONE="── Instalación completa ──"
+    S_LOGIN_WARN="Conecta tus agentes con:  keepalive login   (Claude queda conectado por un año)"
+    S_TEST_CMD="  Todo en un comando:  keepalive"
+    S_SCHED_CMD="  Horario y agentes:   keepalive schedule"
     S_M_FMT="  Mañana:           %02d:%02d"
     S_A_FMT="  Tarde:            %02d:%02d"
     S_N_FMT="  Noche:            %02d:%02d"
@@ -108,10 +108,10 @@ else
     S_CLAUDE_FOUND="Claude Code found"
     S_CONFIG="Creating configuration"
     S_CRON="Setting up crontab"
-    S_DONE="── Installation Complete! — Claude Session ──"
-    S_LOGIN_WARN="Connect Claude for a year, with no further logins:  ~/projects/claude-keepalive/login.sh"
-    S_TEST_CMD="  Test:             bash test.sh"
-    S_SCHED_CMD="  Edit schedule:    bash update-schedule.sh"
+    S_DONE="── Installation complete ──"
+    S_LOGIN_WARN="Connect your agents with:  keepalive login   (Claude stays connected for a year)"
+    S_TEST_CMD="  Everything in one command:  keepalive"
+    S_SCHED_CMD="  Schedule and agents:        keepalive schedule"
     S_M_FMT="  Morning:          %02d:%02d"
     S_A_FMT="  Afternoon:        %02d:%02d"
     S_N_FMT="  Night:            %02d:%02d"
@@ -198,7 +198,7 @@ AFTERNOON_ENABLED=true
 NIGHT_HOUR=17
 NIGHT_MINUTE=0
 NIGHT_ENABLED=false
-CODEX_ENABLED=false
+AGENTS="claude"
 WEEKDAYS="1,2,3,4,5"
 MAX_LOG_LINES=200
 EOF
@@ -218,7 +218,10 @@ _add_if_missing 'AFTERNOON_ENABLED' 'true'
 _add_if_missing 'NIGHT_HOUR'        '17'
 _add_if_missing 'NIGHT_MINUTE'      '0'
 _add_if_missing 'NIGHT_ENABLED'     'false'
-_add_if_missing 'CODEX_ENABLED'     'false'
+if ! grep -q '^AGENTS=' "$CONFIG_FILE"; then
+    grep -q '^CODEX_ENABLED=true' "$CONFIG_FILE" && echo 'AGENTS="claude codex"' >> "$CONFIG_FILE" || echo 'AGENTS="claude"' >> "$CONFIG_FILE"
+    sed -i '/^CODEX_ENABLED=/d' "$CONFIG_FILE"
+fi
 
 source "$CONFIG_FILE"
 
@@ -227,7 +230,10 @@ chmod +x "$SESSION_FILE"                          2>/dev/null || true
 chmod +x "$SCRIPT_DIR/update-schedule.sh"         2>/dev/null || true
 chmod +x "$SCRIPT_DIR/test.sh"                    2>/dev/null || true
 chmod +x "$SCRIPT_DIR/uninstall.sh"               2>/dev/null || true
-chmod +x "$SCRIPT_DIR/login.sh"                   2>/dev/null || true
+chmod +x "$SCRIPT_DIR/login.sh" "$SCRIPT_DIR/keepalive" 2>/dev/null || true
+# One command for everything: keepalive
+mkdir -p "$HOME/.local/bin" && ln -sf "$SCRIPT_DIR/keepalive" "$HOME/.local/bin/keepalive"
+migrate_token
 
 # Ignore fileMode changes so git pull works cleanly after chmod
 git -C "$SCRIPT_DIR" config core.fileMode false 2>/dev/null || true
@@ -235,36 +241,7 @@ git -C "$SCRIPT_DIR" config core.fileMode false 2>/dev/null || true
 # ── Crontab ───────────────────────────────────────────────────────────────────
 step "$S_CRON"
 
-{
-    crontab -l 2>/dev/null | grep -v "session-starter" | grep -v "# Claude session" | grep -v "# Codex session" || true
-    echo ""
-    if [[ "${MORNING_ENABLED:-true}" == "true" ]]; then
-        echo "# Claude session - morning"
-        echo "$MORNING_MINUTE $MORNING_HOUR * * $WEEKDAYS $SESSION_FILE morning"
-    fi
-    if [[ "${AFTERNOON_ENABLED:-true}" == "true" ]]; then
-        echo "# Claude session - afternoon"
-        echo "$AFTERNOON_MINUTE $AFTERNOON_HOUR * * $WEEKDAYS $SESSION_FILE afternoon"
-    fi
-    if [[ "${NIGHT_ENABLED:-false}" == "true" ]]; then
-        echo "# Claude session - night"
-        echo "${NIGHT_MINUTE:-0} ${NIGHT_HOUR:-17} * * $WEEKDAYS $SESSION_FILE night"
-    fi
-    if [[ "${CODEX_ENABLED:-false}" == "true" ]]; then
-        if [[ "${MORNING_ENABLED:-true}" == "true" ]]; then
-            echo "# Codex session - morning"
-            echo "$MORNING_MINUTE $MORNING_HOUR * * $WEEKDAYS $SESSION_FILE morning codex"
-        fi
-        if [[ "${AFTERNOON_ENABLED:-true}" == "true" ]]; then
-            echo "# Codex session - afternoon"
-            echo "$AFTERNOON_MINUTE $AFTERNOON_HOUR * * $WEEKDAYS $SESSION_FILE afternoon codex"
-        fi
-        if [[ "${NIGHT_ENABLED:-false}" == "true" ]]; then
-            echo "# Codex session - night"
-            echo "${NIGHT_MINUTE:-0} ${NIGHT_HOUR:-17} * * $WEEKDAYS $SESSION_FILE night codex"
-        fi
-    fi
-} | crontab -
+write_crontab
 
 ok "crontab configured"
 
