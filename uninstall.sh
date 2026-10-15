@@ -47,7 +47,7 @@ fi
 
 # ── String tables ─────────────────────────────────────────────────────────────
 if [[ "$LANGUAGE" == "es" ]]; then
-    T_TITLE="Desinstalar Claude Session"
+    T_TITLE="Desinstalar agent-keepalive"
     T_CONFIRM="¿Desinstalar completamente?\n\nSe eliminará:\n  • Entradas del crontab\n  • config.sh\n  • sessions.log / codex-sessions.log"
     T_CLAUDE_Q="¿También desinstalar Claude Code?\n(npm uninstall -g @anthropic-ai/claude-code)"
     T_NODE_Q="¿También desinstalar Node.js?\n(apt-get remove nodejs)"
@@ -57,10 +57,10 @@ if [[ "$LANGUAGE" == "es" ]]; then
     T_CLAUDE_OK="Claude Code desinstalado"
     T_NODE_OK="Node.js desinstalado"
     T_SKIP="Omitido"
-    T_DONE="── Desinstalación Completa — Claude Session ──"
+    T_DONE="── Desinstalación completa ──"
     T_CANCELLED="Cancelado."
 else
-    T_TITLE="Uninstall Claude Session"
+    T_TITLE="Uninstall agent-keepalive"
     T_CONFIRM="Uninstall completely?\n\nThis will remove:\n  • Crontab entries\n  • config.sh\n  • sessions.log / codex-sessions.log"
     T_CLAUDE_Q="Also uninstall Claude Code?\n(npm uninstall -g @anthropic-ai/claude-code)"
     T_NODE_Q="Also uninstall Node.js?\n(apt-get remove nodejs)"
@@ -70,7 +70,7 @@ else
     T_CLAUDE_OK="Claude Code uninstalled"
     T_NODE_OK="Node.js uninstalled"
     T_SKIP="Skipped"
-    T_DONE="── Uninstall Complete — Claude Session ──"
+    T_DONE="── Uninstall complete ──"
     T_CANCELLED="Cancelled."
 fi
 
@@ -93,15 +93,19 @@ echo ""
 if crontab -l 2>/dev/null | grep -q "session-starter"; then
     crontab -l 2>/dev/null \
         | grep -v "session-starter" \
-        | grep -v "# Claude session" \
-        | grep -v "# Codex session" \
+        | grep -vE "^# (Claude|Codex|Agent) session" \
         | crontab -
     echo "  ✓ $T_CRON_OK"
 else
     echo "  • $T_CRON_NONE"
 fi
 
-# 2. Generated files
+# 2. Generated files, the year-long Claude token and its line in ~/.bashrc
+sed -i '/# >>> claude-keepalive token >>>/,/# <<< claude-keepalive token <<</d' "$HOME/.bashrc" 2>/dev/null || true
+sed -i '/# >>> agent-keepalive token >>>/,/# <<< agent-keepalive token <<</d' "$HOME/.bashrc" 2>/dev/null || true
+rm -rf "$HOME/.config/agent-keepalive"
+rm -f "$SCRIPT_DIR/.claude-token" "$SCRIPT_DIR/.claude-token.created" "$SCRIPT_DIR"/*-sessions.log*
+[[ "$(readlink -f "$HOME/.local/bin/keepalive" 2>/dev/null)" == "$SCRIPT_DIR/keepalive" ]] && rm -f "$HOME/.local/bin/keepalive"
 rm -f "$CONFIG_FILE" \
       "$LOG_FILE"       "${LOG_FILE}.old"       "${LOG_FILE}.tmp" \
       "$CODEX_LOG_FILE" "${CODEX_LOG_FILE}.old" "${CODEX_LOG_FILE}.tmp"

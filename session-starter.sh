@@ -1,70 +1,61 @@
 #!/bin/bash
+# Sends one short message to an AI agent so its usage window starts now. Cron runs it.
+#   session-starter.sh <morning|afternoon|night> [claude|codex|opencode|gemini|qwen]
+# Each agent runs in its own non-interactive mode. Claude uses the year-long token from `keepalive login claude`
+# when there is one, so the cron never renews (and never breaks) a login. Every run ends in the agent's log as
+# OK, LIMIT (a window was already open) or an ERROR that says what to run.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CONFIG_FILE="$SCRIPT_DIR/config.sh"
-
-[[ -f "$CONFIG_FILE" ]] && source "$CONFIG_FILE"
+# shellcheck source=lib.sh
+source "$SCRIPT_DIR/lib.sh"
+load_config
+migrate_token
 
 MAX_LINES="${MAX_LOG_LINES:-200}"
 TS=$(date '+%Y-%m-%d %H:%M:%S')
-
 SESSION_TYPE="${1:-morning}"
-TOOL="${2:-claude}"
+AGENT="${2:-claude}"
+PROMPT="Keepalive check. Reply with the single word OK."
+LOG_FILE="$(agent_log "$AGENT")"
 
 case "$SESSION_TYPE" in
-    morning)   SESSION_LABEL="MORNING"   ;;
-    afternoon) SESSION_LABEL="AFTERNOON" ;;
-    night)     SESSION_LABEL="NIGHT"     ;;
-    *)         SESSION_LABEL="SESSION"   ;;
+    morning) SESSION_LABEL="MORNING" ;; afternoon) SESSION_LABEL="AFTERNOON" ;;
+    night) SESSION_LABEL="NIGHT" ;; *) SESSION_LABEL="SESSION" ;;
 esac
 
-case "$TOOL" in
-    codex)
-        LOG_FILE="$SCRIPT_DIR/codex-sessions.log"
-        TOOL_CMD=$(command -v codex 2>/dev/null || echo "")
-        ;;
-    *)
-        LOG_FILE="$SCRIPT_DIR/sessions.log"
-        TOOL_CMD=$(command -v claude 2>/dev/null || echo "")
-        ;;
-esac
+if [[ -f "$LOG_FILE" ]] && (( $(wc -l < "$LOG_FILE") >= MAX_LINES )); then
+    tail -n 50 "$LOG_FILE" > "${LOG_FILE}.tmp" && mv "${LOG_FILE}.tmp" "$LOG_FILE"
+fi
 
-_rotate() {
-    [[ ! -f "$LOG_FILE" ]] && return
-    local lines
-    lines=$(wc -l < "$LOG_FILE" 2>/dev/null || echo 0)
-    if (( lines >= MAX_LINES )); then
-        tail -n 50 "$LOG_FILE" > "${LOG_FILE}.tmp" \
-            && mv "${LOG_FILE}.tmp" "$LOG_FILE"
-    fi
+_finish() {
+    printf "[%s] [%s] %s\n---\n" "$TS" "$SESSION_LABEL" "$1" >> "$LOG_FILE"
+    exit "$2"
 }
 
-_log() { printf "[%s] [%s] %s\n" "$TS" "$SESSION_LABEL" "$1" >> "$LOG_FILE"; }
+[[ " $AGENTS_KNOWN " == *" $AGENT "* ]] || _finish "ERROR: unknown agent $AGENT" 1
+agent_installed "$AGENT" || _finish "ERROR: $(agent_title "$AGENT") is not installed — run: sudo npm install -g $(agent_package "$AGENT")" 1
+agent_logged_in "$AGENT" || _finish "ERROR: $(agent_title "$AGENT") is not logged in — run: $(agent_login_command "$AGENT")" 1
 
-_rotate
+LAST=$(mktemp)
+trap 'rm -f "$LAST"' EXIT
+[[ -s "$CLAUDE_TOKEN" ]] && export CLAUDE_CODE_OAUTH_TOKEN="$(cat "$CLAUDE_TOKEN")"
+case "$AGENT" in
+    claude)   COMMAND=(claude -p "$PROMPT") ;;
+    codex)    COMMAND=(codex exec --skip-git-repo-check -s read-only --color never -o "$LAST" "$PROMPT") ;;
+    opencode) COMMAND=(opencode run "$PROMPT") ;;
+    gemini)   COMMAND=(gemini -p "$PROMPT") ;;
+    qwen)     COMMAND=(qwen -p "$PROMPT") ;;
+esac
+RESP=$(cd "$HOME" && timeout 180 "${COMMAND[@]}" </dev/null 2>&1)
+CODE=$?
+[[ -s "$LAST" ]] && RESP=$(cat "$LAST")
 
-if [[ -z "$TOOL_CMD" ]]; then
-    _log "ERROR: $TOOL not found — run install.sh"
-    exit 1
+ONE_LINE=$(printf '%s' "$RESP" | tr '\n' ' ' | sed 's/  */ /g')
+if printf '%s' "$RESP" | grep -qiE 'failed to authenticate|oauth|401|unauthorized|not logged in|please (run|log)|invalid api key|re-?authenticate'; then
+    _finish "ERROR: $(agent_title "$AGENT") login expired — run: $(agent_login_command "$AGENT") | ${ONE_LINE:0:100}" 1
 fi
-
-_log "Starting session reset"
-
-if [[ "$TOOL" == "codex" ]]; then
-    # Codex CLI (@openai/codex) accepts a task as a positional argument
-    RESP=$("$TOOL_CMD" "New session initialized. Context cleared. Ready." 2>&1) || true
-else
-    RESP=$("$TOOL_CMD" -p "New session initialized. Context cleared. Ready." 2>&1) || true
-fi
-_log "Reset: ${RESP:0:120}"
-
-sleep 2
-
-if [[ "$TOOL" == "codex" ]]; then
-    RESP=$("$TOOL_CMD" "Session active. Beginning work period." 2>&1) || true
-else
-    RESP=$("$TOOL_CMD" -p "Session active. Beginning work period." 2>&1) || true
-fi
-_log "Work:  ${RESP:0:120}"
-
-_log "Session complete"
-echo "---" >> "$LOG_FILE"
+# A limit means a usage window is already running, which is what this script is for.
+printf '%s' "$RESP" | grep -qiE 'session limit|usage limit|rate limit|quota' \
+    && _finish "LIMIT (window already active): ${ONE_LINE:0:110}" 0
+(( CODE == 124 )) && _finish "ERROR: $(agent_title "$AGENT") did not answer within 3 minutes" 1
+(( CODE != 0 )) && _finish "ERROR ($CODE): ${ONE_LINE:0:140}" 1
+_finish "OK: ${ONE_LINE:0:120}" 0
