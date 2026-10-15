@@ -48,14 +48,19 @@ esac
 RESP=$(cd "$HOME" && timeout 180 "${COMMAND[@]}" </dev/null 2>&1)
 CODE=$?
 [[ -s "$LAST" ]] && RESP=$(cat "$LAST")
+# Some agents color their output; the log keeps plain text.
+RESP=$(printf '%s' "$RESP" | sed 's/\x1b\[[0-9;?]*[A-Za-z]//g')
 
 ONE_LINE=$(printf '%s' "$RESP" | tr '\n' ' ' | sed 's/  */ /g')
 if printf '%s' "$RESP" | grep -qiE 'failed to authenticate|oauth|401|unauthorized|not logged in|please (run|log)|invalid api key|re-?authenticate'; then
     _finish "ERROR: $(agent_title "$AGENT") login expired — run: $(agent_login_command "$AGENT") | ${ONE_LINE:0:100}" 1
 fi
-# A limit means a usage window is already running, which is what this script is for.
-printf '%s' "$RESP" | grep -qiE 'session limit|usage limit|rate limit|quota' \
+# A limit is not a failure: either a usage window is already running, which is what this script is for, or the
+# account used up its week, which only time fixes.
+printf '%s' "$RESP" | grep -qiE 'weekly limit|weekly usage' \
+    && _finish "LIMIT (weekly limit reached): ${ONE_LINE:0:110}" 0
+printf '%s' "$RESP" | grep -qiE 'session limit|usage limit|rate limit|quota|hit your .*limit' \
     && _finish "LIMIT (window already active): ${ONE_LINE:0:110}" 0
 (( CODE == 124 )) && _finish "ERROR: $(agent_title "$AGENT") did not answer within 3 minutes" 1
 (( CODE != 0 )) && _finish "ERROR ($CODE): ${ONE_LINE:0:140}" 1
-_finish "OK: ${ONE_LINE:0:120}" 0
+_finish "OK: $(printf '%s' "$RESP" | grep -v '^[[:space:]]*$' | tail -1 | cut -c1-120)" 0

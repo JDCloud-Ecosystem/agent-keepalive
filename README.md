@@ -77,7 +77,7 @@ Codex y `<agente>-sessions.log` para los demás). Termina siempre en uno de tres
 | Resultado | Significa                                                                   |
 | --------- | --------------------------------------------------------------------------- |
 | `OK`      | El agente respondió y su ventana empezó                                     |
-| `LIMIT`   | Ya había una ventana abierta; no hay nada que arreglar                      |
+| `LIMIT`   | Ya había una ventana abierta, o la cuenta llegó a su límite semanal; no hay nada que arreglar |
 | `ERROR`   | Algo falló, y la misma línea dice qué comando corre para arreglarlo         |
 
 Los logs se recortan solos al llegar a 200 líneas.
