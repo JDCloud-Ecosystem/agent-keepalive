@@ -5,3 +5,5 @@ sessions.log.tmp
 codex-sessions.log
 codex-sessions.log.old
 codex-sessions.log.tmp
+.claude-token
+.claude-token.created
