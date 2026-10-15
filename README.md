@@ -4,7 +4,7 @@ Abre a la hora que elijas la ventana de uso de tus agentes de IA, para que el l�
 a contar cuando a ti te conviene y no cuando te sientas a trabajar. Un cron envía un mensaje corto a
 cada agente, hasta tres veces al día, y anota cómo salió.
 
-Funciona con Claude Code, Codex, OpenCode, Gemini CLI y Qwen Code. Solo tiene sentido con planes que
+Funciona con Claude Code, Codex y OpenCode. Solo tiene sentido con planes que
 cuentan el uso por ventanas de tiempo, como Claude Pro o Max y ChatGPT Plus o Pro; con una llave de API
 no hay ventana que abrir.
 
@@ -51,13 +51,13 @@ Después conecta tus agentes, como se explica abajo.
 | Claude Code | `keepalive login claude`      | `claude -p`                        |
 | Codex       | `codex login --device-auth`   | `codex exec`                       |
 | OpenCode    | `opencode auth login`         | `opencode run`                     |
-| Gemini CLI  | `gemini`, la primera vez      | `gemini -p`                        |
-| Qwen Code   | `qwen`, la primera vez        | `qwen -p`                          |
 
-Todos se ejecutan en su modo sin terminal, que es el único que funciona dentro de cron. OpenCode,
-Gemini CLI y Qwen Code no los instala `install.sh`; si los quieres, instálalos con
-`sudo npm install -g opencode-ai @google/gemini-cli @qwen-code/qwen-code` y márcalos en
-`keepalive schedule`.
+Todos se ejecutan en su modo sin terminal, que es el único que funciona dentro de cron. OpenCode no
+lo instala `install.sh`; si lo quieres, instálalo con `sudo npm install -g opencode-ai` y márcalo en
+`keepalive schedule`. Con OpenCode solo vale la pena si entra con una suscripción de Claude o ChatGPT.
+
+Gemini CLI y Qwen Code quedan fuera a propósito. Gemini cuenta su uso por día y no por ventanas, así que
+un envío programado no le abre nada, y Qwen Code ya no tiene inicio de sesión gratuito.
 
 **Claude se conecta por un año.** `claude login` guarda una sesión corta que se renueva sola, y si dos
 procesos la renuevan a la vez, como el cron y una terminal abierta, o si una renovación falla, Claude la

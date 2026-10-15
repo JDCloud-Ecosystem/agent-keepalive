@@ -2,7 +2,7 @@
 # Shared by every agent-keepalive script: which agents exist, how each one runs without a terminal, how to tell
 # whether it is logged in, and how the crontab is written. Source it after setting SCRIPT_DIR.
 
-AGENTS_KNOWN="claude codex opencode gemini qwen"
+AGENTS_KNOWN="claude codex opencode"
 STATE_DIR="$HOME/.config/agent-keepalive"
 CLAUDE_TOKEN="$STATE_DIR/claude-token"
 SESSION_FILE="$SCRIPT_DIR/session-starter.sh"
@@ -11,15 +11,13 @@ export PATH="$HOME/.local/bin:$HOME/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
 
 agent_title() {
     case "$1" in
-        claude) echo "Claude Code" ;; codex) echo "Codex" ;; opencode) echo "OpenCode" ;;
-        gemini) echo "Gemini CLI" ;; qwen) echo "Qwen Code" ;; *) echo "$1" ;;
+        claude) echo "Claude Code" ;; codex) echo "Codex" ;; opencode) echo "OpenCode" ;; *) echo "$1" ;;
     esac
 }
 
 agent_package() {
     case "$1" in
         claude) echo "@anthropic-ai/claude-code" ;; codex) echo "@openai/codex" ;; opencode) echo "opencode-ai" ;;
-        gemini) echo "@google/gemini-cli" ;; qwen) echo "@qwen-code/qwen-code" ;;
     esac
 }
 
@@ -38,8 +36,6 @@ agent_logged_in() {
         claude)   [[ -s "$CLAUDE_TOKEN" || -s "$HOME/.claude/.credentials.json" ]] ;;
         codex)    [[ -s "${CODEX_HOME:-$HOME/.codex}/auth.json" ]] ;;
         opencode) [[ -s "${XDG_DATA_HOME:-$HOME/.local/share}/opencode/auth.json" ]] ;;
-        gemini)   [[ -n "${GEMINI_API_KEY:-}" || -s "$HOME/.gemini/oauth_creds.json" ]] ;;
-        qwen)     [[ -n "${OPENAI_API_KEY:-}" || -s "$HOME/.qwen/oauth_creds.json" ]] ;;
         *) return 1 ;;
     esac
 }
@@ -47,7 +43,7 @@ agent_logged_in() {
 agent_login_command() {
     case "$1" in
         claude) echo "keepalive login claude" ;; codex) echo "codex login --device-auth" ;;
-        opencode) echo "opencode auth login" ;; gemini) echo "gemini" ;; qwen) echo "qwen" ;;
+        opencode) echo "opencode auth login" ;;
     esac
 }
 
@@ -68,6 +64,11 @@ load_config() {
         AGENTS="claude"
         [[ "${CODEX_ENABLED:-false}" == "true" ]] && AGENTS="claude codex"
     fi
+    # Only agents with a usage window belong here; one a config still names from before is dropped.
+    local agent kept=""
+    for agent in $AGENTS; do [[ " $AGENTS_KNOWN " == *" $agent "* ]] && kept="$kept $agent"; done
+    AGENTS="${kept# }"
+    [[ -n "$AGENTS" ]] || AGENTS="claude"
 }
 
 set_config() {

@@ -1,6 +1,6 @@
 #!/bin/bash
 # Sends one short message to an AI agent so its usage window starts now. Cron runs it.
-#   session-starter.sh <morning|afternoon|night> [claude|codex|opencode|gemini|qwen]
+#   session-starter.sh <morning|afternoon|night> [claude|codex|opencode]
 # Each agent runs in its own non-interactive mode. Claude uses the year-long token from `keepalive login claude`
 # when there is one, so the cron never renews (and never breaks) a login. Every run ends in the agent's log as
 # OK, LIMIT (a window was already open) or an ERROR that says what to run.
@@ -42,8 +42,6 @@ case "$AGENT" in
     claude)   COMMAND=(claude -p "$PROMPT") ;;
     codex)    COMMAND=(codex exec --skip-git-repo-check -s read-only --color never -o "$LAST" "$PROMPT") ;;
     opencode) COMMAND=(opencode run "$PROMPT") ;;
-    gemini)   COMMAND=(gemini -p "$PROMPT") ;;
-    qwen)     COMMAND=(qwen -p "$PROMPT") ;;
 esac
 RESP=$(cd "$HOME" && timeout 180 "${COMMAND[@]}" </dev/null 2>&1)
 CODE=$?
