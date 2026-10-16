@@ -36,6 +36,7 @@ Después conecta tus agentes, como se explica abajo.
 | ------------------------- | --------------------------------------------------------------- |
 | `keepalive status`        | Cada agente con su etiqueta de color, su cuenta y su último envío |
 | `keepalive login [agente]`| Conecta un agente; sin nombre, pregunta cuál                    |
+| `keepalive logout [agente]`| Cierra la sesión de un agente en esta máquina; `--yes` no pregunta |
 | `keepalive schedule`      | Cambia las horas, los días y qué agentes reciben el envío       |
 | `keepalive test`          | Hace un envío real a cada agente elegido y revisa el resultado  |
 | `keepalive log [agente]`  | Muestra los últimos envíos                                      |
@@ -88,6 +89,19 @@ hubo un `claude login`, ofrece esa cuenta y basta con pulsar Enter.
 Codex y OpenCode no necesitan nada parecido. Codex guarda una sesión de ChatGPT que se renueva sola cada
 vez que corre, y como el cron lo usa a diario no llega a caducar. OpenCode con OpenCode Zen entra con una
 llave de API, que no vence.
+
+**Cerrar una sesión.** `keepalive logout [agente]` deja al agente sin sesión en esta máquina, para
+cambiar de cuenta o cuando el equipo deja de usarse. Antes de cerrar muestra la cuenta y pide confirmación.
+
+| Agente      | Qué quita                                                                         |
+| ----------- | --------------------------------------------------------------------------------- |
+| Claude Code | El token de un año, la cuenta anotada y las líneas de `~/.bashrc` que lo cargan, y además cierra la sesión normal con `claude auth logout` |
+| Codex       | Su sesión, con `codex logout`                                                     |
+| OpenCode    | Sus credenciales de `~/.local/share/opencode/auth.json`, porque su propio cierre de sesión solo funciona con una terminal |
+
+Si el agente estaba en la sesión automática, el comando ofrece sacarlo y actualiza el cron, porque sin
+sesión cada envío fallaría. El último agente que queda nunca sale. En la terminal donde se cerró Claude
+sigue cargado el token hasta que escribas `unset CLAUDE_CODE_OAUTH_TOKEN`; las nuevas ya no lo traen.
 
 ---
 
