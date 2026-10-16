@@ -100,6 +100,30 @@ write_crontab() {
     } | crontab -
 }
 
+# Claude prints its year token through a UI that breaks it into lines as wide as the terminal, about 108
+# characters split over two lines in most windows, and a copy from the screen keeps those breaks. Both read
+# it back whole: the line where it starts plus each following line made only of token characters.
+token_from_screen() {  # a captured terminal session on stdin
+    sed 's/\x1b\[[0-9;?]*[a-zA-Z]//g' | tr -d '\r' | awk '
+        open && /^[[:space:]]*[A-Za-z0-9_-]+[[:space:]]*$/ { gsub(/[[:space:]]/, ""); token = token $0; next }
+        { open = 0 }
+        match($0, /sk-ant-oat01-[A-Za-z0-9_-]+/) { token = substr($0, RSTART, RLENGTH); open = 1 }
+        END { if (token != "") print token }'
+}
+
+read_token() {  # what the person pastes, without echo; the lines of one paste arrive together
+    local line all="" rest
+    { printf '\033[?2004l' >/dev/tty; } 2>/dev/null  # no bracketed-paste marks around what comes next
+    IFS= read -rs line || return 1
+    all="$line"
+    while IFS= read -rs -t 1 line; do all+="$line"; done
+    if [[ -n "$line" ]]; then  # the last piece came without its Enter yet; take it, then wait for the Enter
+        all+="$line"
+        IFS= read -rs rest && all+="$rest"
+    fi
+    printf '%s\n' "$all" | sed 's/\x1b\[20[01]~//g' | tr -d '[:space:]' | grep -oE 'sk-ant-oat01-[A-Za-z0-9_-]+' | head -1
+}
+
 # The year-long Claude token lives outside the repository, so moving or renaming the folder never loses it.
 # Installs before 2026-10 kept it next to the scripts; it moves here the first time any script runs.
 migrate_token() {

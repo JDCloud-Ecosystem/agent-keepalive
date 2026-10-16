@@ -82,6 +82,11 @@ el token en `~/.config/agent-keepalive/` (legible únicamente por ti), comprueba
 el cron y cada terminal nueva lo usen. Un mes antes de que venza, `keepalive status` y `keepalive test`
 lo avisan, y basta con volver a correr el mismo comando.
 
+El token mide más de 100 caracteres, y en una terminal angosta Claude lo muestra partido en dos líneas.
+El comando lo junta solo; si te pide pegarlo, pégalo completo aunque ocupe varias líneas. Si Claude lo
+rechaza, muestra lo que respondió. Si la cuenta está en su límite de uso, el token se guarda igual,
+porque Claude ya lo aceptó.
+
 El token no dice de qué cuenta es, así que al final el comando pregunta con qué correo entraste y lo anota
 en `~/.config/agent-keepalive/claude-account` para que `keepalive status` lo muestre. Si en esa máquina ya
 hubo un `claude login`, ofrece esa cuenta y basta con pulsar Enter.

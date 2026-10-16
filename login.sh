@@ -15,10 +15,11 @@ load_config
 if [[ "${LANGUAGE:-es}" == "es" ]]; then
     T_TITLE="── Conectar Claude por un año ──"
     T_STEPS="Se abre el inicio de sesión de Claude. Abre el enlace en tu navegador, autoriza y pega aquí el código."
-    T_PASTE="No se pudo leer el token. Pega el que se mostró arriba (empieza con sk-ant-oat01-): "
+    T_PASTE="No se pudo leer el token. Pega el que se mostró arriba, completo aunque ocupe varias líneas (empieza con sk-ant-oat01-), y pulsa Enter: "
     T_BAD="Ese no es un token de Claude."
     T_CHECK="Comprobando el token..."
-    T_FAIL="Claude rechazó el token; no se guardó nada. Vuelve a intentarlo."
+    T_FAIL="Claude rechazó el token; no se guardó nada. Vuelve a intentarlo. Esto respondió:"
+    T_LIMIT="Claude aceptó el token, pero la cuenta está en su límite de uso; se guarda igual. Respondió:"
     T_OK="Listo. Claude queda conectado hasta el %s, sin volver a iniciar sesión."
     T_NOTE="Las terminales nuevas ya lo usan; en esta escribe: source ~/.bashrc"
     T_WHO="¿Con qué cuenta de Claude entraste? Pulsa Enter si fue %s: "
@@ -26,10 +27,11 @@ if [[ "${LANGUAGE:-es}" == "es" ]]; then
 else
     T_TITLE="── Connect Claude for a year ──"
     T_STEPS="Claude's sign-in opens. Open the link in your browser, approve, and paste the code here."
-    T_PASTE="Could not read the token. Paste the one shown above (it starts with sk-ant-oat01-): "
+    T_PASTE="Could not read the token. Paste the one shown above, whole even if it spans several lines (it starts with sk-ant-oat01-), and press Enter: "
     T_BAD="That is not a Claude token."
     T_CHECK="Checking the token..."
-    T_FAIL="Claude refused the token; nothing was saved. Try again."
+    T_FAIL="Claude refused the token; nothing was saved. Try again. Its answer:"
+    T_LIMIT="Claude accepted the token, but the account is at its usage limit; it is saved anyway. Its answer:"
     T_OK="Done. Claude stays connected until %s, with no further logins."
     T_NOTE="New terminals use it already; in this one run: source ~/.bashrc"
     T_WHO="Which Claude account did you sign in with? Press Enter if it was %s: "
@@ -45,19 +47,35 @@ echo ""
 printf '\033[1;36m%s\033[0m\n\n%s\n\n' "$T_TITLE" "$T_STEPS"
 script -q -e -c "claude setup-token" "$CAPTURE"
 
-# The screen may wrap the token, so a match only counts when it is whole and Claude accepts it below.
-TOKEN=$(sed 's/\x1b\[[0-9;?]*[a-zA-Z]//g' "$CAPTURE" | grep -aoE 'sk-ant-oat01-[A-Za-z0-9_-]{60,}' | tail -1)
-_works() { CLAUDE_CODE_OAUTH_TOKEN="$1" timeout 120 claude -p "Reply with the single word OK." </dev/null >/dev/null 2>&1; }
+TOKEN=$(token_from_screen < "$CAPTURE")
+
+# 0: Claude answered with it. 2: Claude refused it for a usage limit, which only an accepted token gets.
+# 1: refused or no answer. What Claude said is kept in ANSWER, so a refusal can show why.
+ANSWER=""
+_check() {
+    [[ "$1" =~ ^sk-ant-oat01-[A-Za-z0-9_-]{60,}$ ]] || return 1
+    ANSWER=$(CLAUDE_CODE_OAUTH_TOKEN="$1" timeout 120 claude -p "Reply with the single word OK." </dev/null 2>&1)
+    local code=$?
+    (( code == 124 )) && ANSWER="(no answer in 120 s)"
+    (( code == 0 )) && return 0
+    grep -qiE 'limit (reached|resets)|usage limit|rate limit|weekly limit|out of (extra )?usage' <<< "$ANSWER" && return 2
+    return 1
+}
+_answer() { sed 's/sk-ant-[A-Za-z0-9_-]*/sk-ant-…/g' <<< "$ANSWER" | grep -v '^[[:space:]]*$' | tail -3 | cut -c1-300 | sed 's/^/  /'; }
 
 echo ""
 echo "$T_CHECK"
-if [[ -z "$TOKEN" ]] || ! _works "$TOKEN"; then
-    read -rsp "$T_PASTE" TOKEN
+_check "$TOKEN"; RESULT=$?
+if (( RESULT == 1 )); then
+    printf '%s' "$T_PASTE"
+    TOKEN=$(read_token)
     echo ""
     [[ "$TOKEN" =~ ^sk-ant-oat01-[A-Za-z0-9_-]{60,}$ ]] || { echo "$T_BAD"; exit 1; }
     echo "$T_CHECK"
-    _works "$TOKEN" || { echo "$T_FAIL"; exit 1; }
+    _check "$TOKEN"; RESULT=$?
+    (( RESULT == 1 )) && { echo "$T_FAIL"; _answer; exit 1; }
 fi
+(( RESULT == 2 )) && { echo "$T_LIMIT"; _answer; }
 
 mkdir -p "$STATE_DIR" && chmod 700 "$STATE_DIR"
 printf '%s' "$TOKEN" > "$CLAUDE_TOKEN"
