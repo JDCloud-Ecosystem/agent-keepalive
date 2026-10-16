@@ -34,13 +34,28 @@ Después conecta tus agentes, como se explica abajo.
 
 | Comando                   | Qué hace                                                        |
 | ------------------------- | --------------------------------------------------------------- |
-| `keepalive status`        | Qué agentes participan, si tienen sesión y cómo salió el último envío |
+| `keepalive status`        | Cada agente con su etiqueta de color, su cuenta y su último envío |
 | `keepalive login [agente]`| Conecta un agente; sin nombre, pregunta cuál                    |
+| `keepalive logout [agente]`| Cierra la sesión de un agente en esta máquina; `--yes` no pregunta |
 | `keepalive schedule`      | Cambia las horas, los días y qué agentes reciben el envío       |
 | `keepalive test`          | Hace un envío real a cada agente elegido y revisa el resultado  |
 | `keepalive log [agente]`  | Muestra los últimos envíos                                      |
 | `keepalive update`        | Baja la versión más reciente sin tocar tu horario               |
 | `keepalive uninstall`     | Quita el cron, la configuración y el comando                    |
+
+En `keepalive status` la etiqueta de cada agente dice de un vistazo cómo va:
+
+| Etiqueta     | Color    | Significa                                                     |
+| ------------ | -------- | ------------------------------------------------------------- |
+| `OK`         | verde    | Tiene sesión y el último envío salió bien                     |
+| `FALLÓ`      | rojo     | El último envío falló o el agente no está instalado           |
+| `SIN SESIÓN` | rojo     | Falta conectarlo; al lado aparece el comando                  |
+| `LÍMITE`     | amarillo | La cuenta llegó a su límite semanal y se libera sola          |
+| `ESPERA`     | cian     | Tiene sesión, pero todavía no le toca su primer envío         |
+| `FUERA`      | gris     | No participa en la sesión automática                          |
+
+Debajo de cada agente aparece su cuenta: el correo y el plan para Claude y Codex, y el proveedor para
+OpenCode.
 
 ---
 
@@ -66,6 +81,27 @@ de un año que nunca se renueva, así que nada lo rompe. Abre el inicio de sesi�
 el token en `~/.config/agent-keepalive/` (legible únicamente por ti), comprueba que funcione y hace que
 el cron y cada terminal nueva lo usen. Un mes antes de que venza, `keepalive status` y `keepalive test`
 lo avisan, y basta con volver a correr el mismo comando.
+
+El token no dice de qué cuenta es, así que al final el comando pregunta con qué correo entraste y lo anota
+en `~/.config/agent-keepalive/claude-account` para que `keepalive status` lo muestre. Si en esa máquina ya
+hubo un `claude login`, ofrece esa cuenta y basta con pulsar Enter.
+
+Codex y OpenCode no necesitan nada parecido. Codex guarda una sesión de ChatGPT que se renueva sola cada
+vez que corre, y como el cron lo usa a diario no llega a caducar. OpenCode con OpenCode Zen entra con una
+llave de API, que no vence.
+
+**Cerrar una sesión.** `keepalive logout [agente]` deja al agente sin sesión en esta máquina, para
+cambiar de cuenta o cuando el equipo deja de usarse. Antes de cerrar muestra la cuenta y pide confirmación.
+
+| Agente      | Qué quita                                                                         |
+| ----------- | --------------------------------------------------------------------------------- |
+| Claude Code | El token de un año, la cuenta anotada y las líneas de `~/.bashrc` que lo cargan, y además cierra la sesión normal con `claude auth logout` |
+| Codex       | Su sesión, con `codex logout`                                                     |
+| OpenCode    | Sus credenciales de `~/.local/share/opencode/auth.json`, porque su propio cierre de sesión solo funciona con una terminal |
+
+Si el agente estaba en la sesión automática, el comando ofrece sacarlo y actualiza el cron, porque sin
+sesión cada envío fallaría. El último agente que queda nunca sale. En la terminal donde se cerró Claude
+sigue cargado el token hasta que escribas `unset CLAUDE_CODE_OAUTH_TOKEN`; las nuevas ya no lo traen.
 
 ---
 
