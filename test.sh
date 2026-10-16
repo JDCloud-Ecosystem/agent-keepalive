@@ -66,7 +66,7 @@ if [[ "$LANGUAGE" == "es" ]]; then
     T_ALL_OK="── Todas las Pruebas Pasaron — agent-keepalive ──"
     T_FAIL_S="── %d Prueba(s) Fallaron — agent-keepalive ──"
     T_LOGIN="keepalive login"
-    T_TOKEN="Claude conectado por un año"
+    T_TOKEN="Token de Claude vigente"
     T_TOKEN_SOON="El token de Claude vence pronto: keepalive login claude"
     T_DAYS="días"
     T_AGENT_OK="instalado y con sesión"
@@ -91,7 +91,7 @@ else
     T_ALL_OK="── All Tests Passed — agent-keepalive ──"
     T_FAIL_S="── %d Test(s) Failed — agent-keepalive ──"
     T_LOGIN="keepalive login"
-    T_TOKEN="Claude connected for a year"
+    T_TOKEN="Claude token valid"
     T_TOKEN_SOON="The Claude token expires soon: keepalive login claude"
     T_DAYS="days"
     T_AGENT_OK="installed and logged in"
@@ -100,8 +100,8 @@ else
     T_RUN_AGENT="Sending to"
 fi
 
-_ok()   { echo "  ✓ $*"; (( PASS++ )) || true; }
-_fail() { echo "  ✗ $*"; (( FAIL++ )) || true; }
+_ok()   { printf '  \033[1;32m✓\033[0m %s\n' "$*"; (( PASS++ )) || true; }
+_fail() { printf '  \033[1;31m✗\033[0m %s\n' "$*"; (( FAIL++ )) || true; }
 _info() { echo "  • $*"; }
 
 echo ""

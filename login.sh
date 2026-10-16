@@ -21,6 +21,8 @@ if [[ "${LANGUAGE:-es}" == "es" ]]; then
     T_FAIL="Claude rechazó el token; no se guardó nada. Vuelve a intentarlo."
     T_OK="Listo. Claude queda conectado hasta el %s, sin volver a iniciar sesión."
     T_NOTE="Las terminales nuevas ya lo usan; en esta escribe: source ~/.bashrc"
+    T_WHO="¿Con qué cuenta de Claude entraste? Pulsa Enter si fue %s: "
+    T_WHO_NEW="¿Con qué cuenta de Claude entraste? Escribe su correo: "
 else
     T_TITLE="── Connect Claude for a year ──"
     T_STEPS="Claude's sign-in opens. Open the link in your browser, approve, and paste the code here."
@@ -30,6 +32,8 @@ else
     T_FAIL="Claude refused the token; nothing was saved. Try again."
     T_OK="Done. Claude stays connected until %s, with no further logins."
     T_NOTE="New terminals use it already; in this one run: source ~/.bashrc"
+    T_WHO="Which Claude account did you sign in with? Press Enter if it was %s: "
+    T_WHO_NEW="Which Claude account did you sign in with? Type its email: "
 fi
 
 agent_installed claude || { echo "ERROR: claude not found — run install.sh"; exit 1; }
@@ -60,6 +64,15 @@ printf '%s' "$TOKEN" > "$CLAUDE_TOKEN"
 chmod 600 "$CLAUDE_TOKEN"
 date '+%Y-%m-%d' > "$CLAUDE_TOKEN.created"
 migrate_token
+
+# The token says nothing about its account, so `keepalive status` shows the one written down here. The last
+# `claude login` on this machine is the likely answer, offered as the default.
+KNOWN=$(sed -nE 's/.*"emailAddress": *"([^"]+)".*/\1/p' "$HOME/.claude.json" 2>/dev/null | head -1)
+echo ""
+if [[ -n "$KNOWN" ]]; then printf "$T_WHO" "$KNOWN"; else printf '%s' "$T_WHO_NEW"; fi
+read -r ACCOUNT
+ACCOUNT="${ACCOUNT:-$KNOWN}"
+if [[ -n "$ACCOUNT" ]]; then printf '%s\n' "$ACCOUNT" > "$CLAUDE_ACCOUNT"; else rm -f "$CLAUDE_ACCOUNT"; fi
 
 echo ""
 printf "\033[1;32m$T_OK\033[0m\n" "$(date -d '+1 year' '+%Y-%m-%d')"
