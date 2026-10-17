@@ -58,7 +58,9 @@ _check() {
     local code=$?
     (( code == 124 )) && ANSWER="(no answer in 120 s)"
     (( code == 0 )) && return 0
-    grep -qiE 'limit (reached|resets)|usage limit|rate limit|weekly limit|out of (extra )?usage' <<< "$ANSWER" && return 2
+    # The same answers session-starter.sh takes for a limit, such as "You've hit your session limit · resets 3pm".
+    grep -qiE 'weekly limit|weekly usage|session limit|usage limit|rate limit|quota|hit your .*limit|limit reached' \
+        <<< "$ANSWER" && return 2
     return 1
 }
 _answer() { sed 's/sk-ant-[A-Za-z0-9_-]*/sk-ant-…/g' <<< "$ANSWER" | grep -v '^[[:space:]]*$' | tail -3 | cut -c1-300 | sed 's/^/  /'; }
