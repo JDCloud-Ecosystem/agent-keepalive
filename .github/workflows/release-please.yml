@@ -1,0 +1,33 @@
+name: Release Please
+
+# On every push to main, Release Please keeps one release PR up to date: the next version in version.txt and
+# .release-please-manifest.json, and the CHANGELOG.md entry built from the commits since the last tag. Merging
+# the PR tags v<version> and publishes its GitHub release. The process is in docs/RELEASE.md.
+#
+# Needs "Allow GitHub Actions to create and approve pull requests", already on for this repository.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {} # Recovers a push that fired no event (see release-guard.yml)
+
+permissions: {}
+
+concurrency:
+  group: release-please-main
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Release Please
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Tags, releases and the release branch
+      pull-requests: write # The release PR
+      issues: write # Release Please labels its PR
+    steps:
+      # Pinned to a commit. To update: gh api repos/googleapis/release-please-action/git/refs/tags/<version> --jq '.object.sha'
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json

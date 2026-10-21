@@ -1,0 +1,36 @@
+name: Workflows Lint
+
+# An invalid workflow only surfaces as a startup failure once it is on main, where nothing gates it.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/**"
+
+permissions: {}
+
+jobs:
+  actionlint:
+    name: actionlint
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # Checkout of the workflow files under review
+    env:
+      ACTIONLINT_VERSION: "1.7.12" # Version and checksum are the pin; no third-party action in the chain
+      ACTIONLINT_SHA256: "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8"
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install actionlint
+        run: |
+          set -euo pipefail
+          archive="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          curl -sSfLo "$archive" \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/${archive}"
+          echo "${ACTIONLINT_SHA256}  ${archive}" | sha256sum -c -
+          tar -xzf "$archive" actionlint
+
+      # Both linters are off: they check the shell and Python inside `run:`, not whether it compiles.
+      - name: Lint workflows
+        run: ./actionlint -color -shellcheck= -pyflakes=

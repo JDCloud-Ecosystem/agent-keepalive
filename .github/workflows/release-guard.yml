@@ -1,0 +1,133 @@
+name: Release Guard
+
+# Release Please only runs on a push to main, so a workflow file that fails to load, a dropped job, or a push that
+# fired no event stops releases without anyone noticing. Most of those are passing hiccups, so the guard first fixes
+# what it can: it gives a fresh commit an hour, and when main's last commit has no successful run it starts Release
+# Please again and waits for it. Only a retry that also fails opens an issue, and an issue already saying the same is
+# left alone. A separate file, because a broken one cannot watch itself.
+on:
+  schedule:
+    - cron: "0 15 * * *" # Daily at 09:00 America/Mexico_City
+  workflow_dispatch: {}
+
+permissions: {}
+
+concurrency:
+  group: release-guard
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Check Release Please is processing main
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      actions: write # Lists the Release Please runs and starts one again
+      contents: read # Reads main's head commit through the API
+      issues: write # Opens, updates and closes the tracking issue
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }} # Nothing is checked out, so gh needs the repository named
+      TRACKING_TITLE: "Release Please is not processing main" # The guard finds its own issue by this title
+      GRACE_MINUTES: "60" # A commit this recent may still be waiting for its run
+
+    steps:
+      - name: Check main, and run Release Please again when it missed it
+        id: check
+        run: |
+          set -euo pipefail
+
+          head_sha=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq '.sha')
+          head_date=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq '.commit.committer.date')
+          age=$(( ($(date -u +%s) - $(date -u -d "$head_date" +%s)) / 60 ))
+          runs_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/workflows/release-please.yml"
+
+          # The newest Release Please run for main's last commit, as "status conclusion id", or nothing.
+          run_for_head() {
+            gh api "repos/$GITHUB_REPOSITORY/actions/workflows/release-please.yml/runs?branch=main&head_sha=$head_sha&per_page=1" \
+              --jq 'if (.workflow_runs | length) == 0 then "" else (.workflow_runs[0] | [.status, (.conclusion // "none"), (.id | tostring)] | join(" ")) end'
+          }
+
+          latest=$(run_for_head)
+          if [ -z "$latest" ] && [ "$age" -lt "$GRACE_MINUTES" ]; then
+            echo "main's last commit is $age minutes old; its run may still be on the way."
+            printf 'pending=true\n' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ -n "$latest" ]; then
+            read -r status conclusion run_id <<< "$latest"
+            # A run still going proves nothing either way, and closing the issue now could hide an outage.
+            if [ "$status" != "completed" ]; then
+              echo "Run $run_id is $status; nothing to check yet."
+              printf 'pending=true\n' >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            if [ "$conclusion" = "success" ]; then
+              echo "Release Please is up to date with main ($head_sha)."
+              exit 0
+            fi
+          fi
+
+          echo "main's last commit ${head_sha:0:8} has no successful Release Please run; starting it again."
+          gh workflow run release-please.yml --ref main
+          status="" conclusion="" run_id=""
+          for _ in $(seq 1 40); do
+            sleep 30
+            latest=$(run_for_head)
+            [ -n "$latest" ] || continue
+            read -r status conclusion run_id <<< "$latest"
+            [ "$status" = "completed" ] && break
+          done
+
+          if [ "$status" = "completed" ] && [ "$conclusion" = "success" ]; then
+            echo "The retry worked; nothing to report."
+            exit 0
+          fi
+          where="$runs_url"
+          [ -n "$run_id" ] && where="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$run_id"
+          printf 'problem=%s\n' "Release Please no procesó el último commit de \`main\` (\`${head_sha:0:8}\`), ni al volver a lanzarlo. Última ejecución $where" >> "$GITHUB_OUTPUT"
+
+      - name: Sync the tracking issue
+        if: steps.check.outputs.pending != 'true'
+        env:
+          PROBLEM: ${{ steps.check.outputs.problem }} # Empty when main is covered
+        run: |
+          set -euo pipefail
+
+          existing=$(gh issue list --state open --label bug --limit 100 --json number,title \
+            | jq -r --arg t "$TRACKING_TITLE" '[.[] | select(.title == $t)][0].number // empty')
+
+          if [ -z "$PROBLEM" ]; then
+            if [ -n "$existing" ]; then
+              gh issue close "$existing" --comment "Release Please volvió a procesar \`main\`. Lo cerró la guardia."
+              echo "Closed tracking issue #$existing."
+            else
+              echo "Nothing to report."
+            fi
+            exit 0
+          fi
+
+          {
+            echo "$PROBLEM"
+            echo
+            echo "Mientras siga así, el PR de versión no se actualiza y no sale ninguna versión. La guardia ya lo"
+            echo "volvió a lanzar una vez, así que no es un tropiezo pasajero."
+            echo
+            echo "**Qué revisar**"
+            echo
+            echo "1. Abrir la ejecución que falló y leer su error, aunque haya fallado antes de crear jobs."
+            echo "2. Revisar el estado de GitHub Actions en https://www.githubstatus.com y que el archivo del workflow sea válido."
+            echo
+            echo "Lo abrió \`.github/workflows/release-guard.yml\`, y se cierra solo cuando Release Please vuelve a procesar \`main\`."
+          } > body.md
+
+          if [ -n "$existing" ]; then
+            if [ "$(gh issue view "$existing" --json body --jq '.body')" = "$(cat body.md)" ]; then
+              echo "Issue #$existing already says this; left as it is."
+            else
+              gh issue edit "$existing" --body-file body.md
+              echo "Updated tracking issue #$existing."
+            fi
+          else
+            gh issue create --title "$TRACKING_TITLE" --label bug --body-file body.md
+          fi
