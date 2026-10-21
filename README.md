@@ -162,6 +162,8 @@ Después de editarlo a mano, `keepalive update` vuelve a escribir el cron.
 | `test.sh`            | La prueba completa                                             |
 | `uninstall.sh`       | Lo quita todo                                                  |
 | `config.sh`, `*.log` | Se generan al usarlo y git los ignora                          |
+| `version.txt`        | La versión instalada; la escribe Release Please                |
+| `package.json`       | Revisa los commits de quien contribuye; los scripts no usan Node |
 
 ---
 
@@ -176,3 +178,10 @@ Después de editarlo a mano, `keepalive update` vuelve a escribir el cron.
 
 Cada usuario del servidor tiene su propia instalación y sus propias sesiones. No hay demonios ni
 procesos en segundo plano, solo cron y bash. Probado en Ubuntu Server 22.04 y 24.04.
+
+---
+
+## Contribuir
+
+Cómo se propone un cambio está en [CONTRIBUTING.md](CONTRIBUTING.md), y cómo sale cada versión, en
+[docs/RELEASE.md](docs/RELEASE.md). Los cambios de cada versión están en [CHANGELOG.md](CHANGELOG.md).
