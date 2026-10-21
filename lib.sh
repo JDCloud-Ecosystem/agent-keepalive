@@ -227,3 +227,9 @@ migrate_token() {
             "$CLAUDE_TOKEN" "$CLAUDE_TOKEN" >> "$HOME/.bashrc"
     fi
 }
+
+# An address made of plain ASCII, as Claude accounts are; anything with a broken or foreign byte fails.
+valid_email() {
+    local LC_ALL=C
+    [[ "$1" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$ ]]
+}
