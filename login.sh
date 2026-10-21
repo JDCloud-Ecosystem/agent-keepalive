@@ -24,6 +24,7 @@ if [[ "${LANGUAGE:-es}" == "es" ]]; then
     T_NOTE="Las terminales nuevas ya lo usan; en esta escribe: source ~/.bashrc"
     T_WHO="¿Con qué cuenta de Claude entraste? Pulsa Enter si fue %s: "
     T_WHO_NEW="¿Con qué cuenta de Claude entraste? Escribe su correo: "
+    T_WHO_BAD="Eso no parece un correo. Escríbelo otra vez, sin acentos, o pulsa Enter para dejarlo en blanco."
 else
     T_TITLE="── Connect Claude for a year ──"
     T_STEPS="Claude's sign-in opens. Open the link in your browser, approve, and paste the code here."
@@ -36,6 +37,7 @@ else
     T_NOTE="New terminals use it already; in this one run: source ~/.bashrc"
     T_WHO="Which Claude account did you sign in with? Press Enter if it was %s: "
     T_WHO_NEW="Which Claude account did you sign in with? Type its email: "
+    T_WHO_BAD="That does not look like an email. Type it again, or press Enter to leave it blank."
 fi
 
 agent_installed claude || { echo "ERROR: claude not found — run install.sh"; exit 1; }
@@ -89,9 +91,17 @@ migrate_token
 # `claude login` on this machine is the likely answer, offered as the default.
 KNOWN=$(sed -nE 's/.*"emailAddress": *"([^"]+)".*/\1/p' "$HOME/.claude.json" 2>/dev/null | head -1)
 echo ""
-if [[ -n "$KNOWN" ]]; then printf "$T_WHO" "$KNOWN"; else printf '%s' "$T_WHO_NEW"; fi
-read -r ACCOUNT
-ACCOUNT="${ACCOUNT:-$KNOWN}"
+# Only a plain email is written: a terminal that drops half of a typed character would otherwise leave a
+# broken byte in the file, and every tool that reads it would trip on it.
+while true; do
+    if [[ -n "$KNOWN" ]]; then printf "$T_WHO" "$KNOWN"; else printf '%s' "$T_WHO_NEW"; fi
+    read -r ACCOUNT
+    ACCOUNT="${ACCOUNT:-$KNOWN}"
+    [[ -z "$ACCOUNT" ]] && break
+    valid_email "$ACCOUNT" && break
+    echo "$T_WHO_BAD"
+    KNOWN=""
+done
 if [[ -n "$ACCOUNT" ]]; then printf '%s\n' "$ACCOUNT" > "$CLAUDE_ACCOUNT"; else rm -f "$CLAUDE_ACCOUNT"; fi
 
 echo ""
