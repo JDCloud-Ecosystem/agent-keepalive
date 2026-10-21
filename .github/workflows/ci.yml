@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  scripts:
+    name: Scripts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Syntax
+        run: |
+          set -euo pipefail
+          for script in ./*.sh keepalive; do
+            bash -n "$script"
+          done
+          echo "Every script parses."
+
+      # Errors only, until the scripts carry no warnings (unused strings, a source shellcheck cannot follow).
+      - name: ShellCheck
+        run: |
+          set -euo pipefail
+          shellcheck --version | sed -n 2p
+          shellcheck -x --severity=error ./*.sh keepalive
+          echo "No shellcheck errors."
