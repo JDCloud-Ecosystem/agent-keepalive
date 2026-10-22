@@ -3,9 +3,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-# The warnings left today, two sources shellcheck cannot follow, a name only another script reads and one local
-# declared and assigned together. Lower it when one goes; never raise it.
-MAX_WARNINGS=4
+# The scripts carry no shellcheck warning, and a change keeps it that way.
+MAX_WARNINGS=0
 
 cd "$ROOT"
 
