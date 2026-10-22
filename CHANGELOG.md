@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.1.0](https://github.com/JDCloud-Ecosystem/agent-keepalive/compare/v1.0.1...v1.1.0) (2026-10-22)
+
+
+### Features
+
+* **menu:** one Spanish menu with tables, single-key options and 0 to go back from every screen ([#10](https://github.com/JDCloud-Ecosystem/agent-keepalive/issues/10)) ([8ddf70c](https://github.com/JDCloud-Ecosystem/agent-keepalive/commit/8ddf70c26e6efa9f2c50452dace036f6b3edb448))
+* **update:** announce new versions with their changelog and update even after a history rewrite ([#17](https://github.com/JDCloud-Ecosystem/agent-keepalive/issues/17)) ([136fd8c](https://github.com/JDCloud-Ecosystem/agent-keepalive/commit/136fd8c6ffbf0b622ca811d22a45a8d722bb2bcd))
+
+
+### Code Refactoring
+
+* **layout:** keep the scripts in lib and scripts and the person's data in ~/.config ([#19](https://github.com/JDCloud-Ecosystem/agent-keepalive/issues/19)) ([142a401](https://github.com/JDCloud-Ecosystem/agent-keepalive/commit/142a4017acc645433544c32bb7cc06cbad85ad05))
+
+
+### Documentation
+
+* **conventions:** open an issue and a pull request for every change ([#16](https://github.com/JDCloud-Ecosystem/agent-keepalive/issues/16)) ([1a35716](https://github.com/JDCloud-Ecosystem/agent-keepalive/commit/1a357168d8475b0cb10fbd9400a7fe3f2ae9acdb))
+
 ## [1.0.1](https://github.com/JDCloud-Ecosystem/agent-keepalive/compare/v1.0.0...v1.0.1) (2026-10-21)
 
 
