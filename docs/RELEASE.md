@@ -19,7 +19,7 @@ Las versiones las publica [Release Please](https://github.com/googleapis/release
 ```text
 PR (feat/fix/...) fusionado a main con Squash and merge
           │
-          ├─▶ ci.yml revisa la sintaxis y corre shellcheck
+          ├─▶ ci.yml revisa los scripts y corre las pruebas de la terminal
           ├─▶ Cada instalación ya lo recibe con keepalive update
           │
           ▼
