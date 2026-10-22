@@ -12,7 +12,7 @@ public.
 | #   | Rule                                                                                                                        |
 | --- | --------------------------------------------------------------------------------------------------------------------------- |
 | 1   | **NO COMMITS**; never `git add`, `git commit`, `git tag`, `git merge` or `git push`. The developer runs the commit guide.   |
-| 2   | **`main` always works.** Every install follows it with `keepalive update` (`git pull --ff-only`), so a merge is a release. |
+| 2   | **`main` always works.** Every install follows it with `keepalive update`, so a merge is a release.                       |
 | 3   | **Spec first**; no implementation of a feature until its spec says `status: approved`.                                     |
 | 4   | **LF line endings.** `.gitattributes` enforces them; a script saved with CRLF breaks on Linux.                              |
 | 5   | **Spanish only.** Every string a person sees is Spanish, and there is no language to pick.                                  |
@@ -277,8 +277,19 @@ are not obvious from the code.
 - **The menu:** `keepalive` with no arguments, only in a terminal; without one it prints `status`. Three
   environment variables let a host program frame it: `KEEPALIVE_HEADER` (base64, drawn above every title),
   `KEEPALIVE_NOTICE` (base64, shown once) and `KEEPALIVE_EXIT_LABEL` (the label of option `0`).
-- **Updates:** `keepalive update` is `git pull --ff-only` on the clone, `chmod +x` on the scripts and a fresh
-  `write_crontab`. `core.fileMode false` keeps a mode change from blocking the pull.
+- **Looking for a new version ([ADR 0003](docs/adr/0003-look-for-new-versions-with-git-fetch.md)):** each send, and
+  the menu when it opens, starts `check_update --if-stale` in the background. It is a `git fetch` of main at most
+  once every 20 hours, timed by the date of `FETCH_HEAD`, under a `flock` in `~/.config/agent-keepalive/` so two
+  sends in the same minute fetch once, with no password prompt and a one-minute limit. Whether there is a newer
+  version is `version.txt` against `origin/main:version.txt`, which needs no network.
+- **Updates:** `keepalive update [--yes]` fetches, shows the `CHANGELOG.md` entries of every newer version
+  (`_changelog_entries` reads the Release Please format and the 1.0.0 paragraph), asks unless `--yes` or no
+  terminal, and then `_move_to_main` fast-forwards. When main was rewritten with the same files, HEAD's tree is
+  somewhere in main's history and it resets onto main; hand edits to tracked files go to the stash first; a clone
+  with commits of its own is left as it was. It then runs `keepalive migrate` from the new code, so what the install
+  keeps is brought up to date by the version that knows it. `core.fileMode false` keeps a mode change from blocking
+  it. An install from before this check updates with its own `git pull --ff-only`, which works as long as main is
+  not rewritten; the README gives it the two commands for when it was.
 - **Tests:** `tests/run.sh` builds a clean Ubuntu image, puts stand-in `claude`, `codex`, `opencode` and `npm` in
   `/usr/local/bin`, installs the working tree for a user `tester` from a local bare repository, and
   `tests/drive.py` drives every screen through a real pseudo-terminal.

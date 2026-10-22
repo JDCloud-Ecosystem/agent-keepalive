@@ -30,9 +30,9 @@ Después conecta tus agentes, como se explica abajo.
 
 ## El menú
 
-`keepalive` sin nada más abre un menú. Arriba muestra el horario, cuándo es el próximo envío y una tabla con
-cada agente, su etiqueta, su cuenta y su último envío, y debajo cada opción con su número, en grupos. Lo que
-haya que arreglar aparece justo debajo de la tabla.
+`keepalive` sin nada más abre un menú. Arriba muestra el horario, cuándo es el próximo envío, la versión
+instalada y una tabla con cada agente, su etiqueta, su cuenta y su último envío, y debajo cada opción con su
+número, en grupos. Lo que haya que arreglar aparece justo debajo de la tabla.
 
 | Grupo                | Opciones                                                                     |
 | -------------------- | ---------------------------------------------------------------------------- |
@@ -62,7 +62,8 @@ Cada opción del menú también se corre directa.
 | `keepalive schedule`        | Cambia los días, las horas y qué agentes reciben el envío           |
 | `keepalive test`            | Hace un envío real a cada agente elegido y revisa el resultado      |
 | `keepalive log [agente]`    | Muestra los últimos envíos                                          |
-| `keepalive update`          | Baja la versión más reciente de agent-keepalive sin tocar tu horario |
+| `keepalive update`          | Muestra lo que trae la versión más reciente y la baja sin tocar tu horario |
+| `keepalive changelog`       | Muestra los cambios de la versión que tienes y de las anteriores    |
 | `keepalive update-agents`   | Actualiza Claude Code, Codex y OpenCode sin tocar sus sesiones      |
 | `keepalive uninstall`       | Quita el cron, la configuración y el comando                        |
 
@@ -84,6 +85,31 @@ La etiqueta es texto de color, sin fondo, para que se lea en cualquier tema de l
 aparece su cuenta, con el correo y el plan para Claude y Codex y el proveedor para OpenCode, y su último envío.
 `keepalive status` suma la columna de la sesión, con la fecha en que vence la de Claude. Debajo de la tabla va
 una línea por cada agente que necesita algo, con lo que hay que hacer.
+
+---
+
+## Versiones nuevas
+
+agent-keepalive busca solo si hay una versión nueva. Una vez al día, el primer envío del cron revisa GitHub en
+segundo plano, sin demorar el envío, y abrir el menú hace lo mismo si ya pasó un día. Cuando la hay, el menú lo
+dice junto a la versión instalada y la opción para actualizar dice a qué versión lleva.
+
+```text
+  Versión        1.1.0, hay una nueva, la 1.2.0
+```
+
+Esa opción, igual que `keepalive update`, muestra primero una tabla con los cambios de cada versión nueva,
+sacada de `CHANGELOG.md`, y pregunta antes de actualizar. Los cambios van como quedaron en el changelog, en
+inglés. `keepalive update --yes` no pregunta, y sin terminal tampoco. `keepalive changelog` muestra los cambios
+de la versión que tienes y de las anteriores.
+
+La actualización nunca toca tu horario, tu historial ni tus cuentas. Si cambiaste a mano algún archivo de la
+instalación, lo guarda con `git stash` antes de actualizar y te lo dice. Si la copia tiene commits propios que no
+están en GitHub, no toca nada. También funciona cuando la historia de `main` se reescribió con el mismo
+contenido, porque reconoce que los archivos son los mismos.
+
+Revisar GitHub es un `git fetch`, sin llaves ni cuentas. Sin red se rinde en un minuto, y ni el menú ni el envío
+lo esperan.
 
 ---
 
@@ -202,6 +228,15 @@ Después de editarlo a mano, `keepalive update` vuelve a escribir el cron.
 - **Un `ERROR` de inicio de sesión.** Corre el comando que trae la misma línea, por ejemplo
   `keepalive login claude` o `codex login --device-auth`.
 - **El cron no corre.** Revisa que esté activo con `sudo systemctl status cron`.
+- **`keepalive update` dice `Not possible to fast-forward`.** Pasa con una instalación anterior a la que busca
+  versiones sola, cuando la historia de `main` cambió. Estos dos comandos la ponen al día sin tocar tu horario,
+  y después la actualización ya se arregla sola. Si cambiaste a mano algún archivo, guárdalo antes con
+  `git -C ~/projects/agent-keepalive stash`.
+
+  ```bash
+  git -C ~/projects/agent-keepalive fetch origin
+  git -C ~/projects/agent-keepalive reset --hard origin/main
+  ```
 - **Los scripts muestran `^M`.** Se clonaron antes de que existiera `.gitattributes`; `sed -i 's/\r//' *.sh`
   lo corrige.
 
