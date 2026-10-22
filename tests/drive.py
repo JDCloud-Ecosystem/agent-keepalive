@@ -382,25 +382,225 @@ def t_update_agents():
     term.wait()
 
 
+def sh(command):
+    return subprocess.run(["bash", "-c", command], capture_output=True, text=True)
+
+
+def changelog_entry(version, sections):
+    """A CHANGELOG.md entry as Release Please writes it, with the links it adds to each line."""
+    link = "https://github.com/JDCloud-Ecosystem/agent-keepalive"
+    lines = [f"## [{version}]({link}/compare/v1.0.1...v{version}) (2026-10-23)", "", ""]
+    for heading, items in sections.items():
+        lines += [f"### {heading}", ""]
+        lines += [f"* **{scope}:** {words} ([#99]({link}/issues/99)) ([abc1234]({link}/commit/abc1234))"
+                  for scope, words in items]
+        lines += ["", ""]
+    return "\n".join(lines)
+
+
+def release(work, version, sections):
+    """Pushes a new version from a working clone: version.txt and its CHANGELOG.md entry, as a release PR does."""
+    changelog = open(f"{work}/CHANGELOG.md").read()
+    head, rest = changelog.split("\n\n", 1)
+    with open(f"{work}/CHANGELOG.md", "w") as handle:
+        handle.write(f"{head}\n\n{changelog_entry(version, sections)}{rest}")
+    with open(f"{work}/version.txt", "w") as handle:
+        handle.write(version + "\n")
+    done = sh(f"cd {work} && git commit -qam 'chore(release): {version}' && git push -q origin HEAD:main")
+    assert done.returncode == 0, done.stderr
+
+
+NEW = {"Features": [("update", "announce new versions with their changelog and ask before updating")],
+       "Bug Fixes": [("menu", "keep the schedule when the menu opens again after an update")],
+       "Continuous Integration": [("workflows", "run the terminal tests on every pull request")]}
+
+
 def t_update_repo():
     term = menu()
     term.key("7")
-    term.expect("Ya tenías la versión más reciente", 20)
+    term.expect("Ya tienes la versión más reciente", 20)
     term.expect("0  Volver al menú")
     term.key("0")
     term.expect(PICK)
-    # A new version lands upstream: the menu pulls it and opens again with it.
-    subprocess.run(["bash", "-c", "cd /tmp && rm -rf up && git clone -q /srv/ka.git up && cd up && echo 9.9.9 > version.txt "
-                    "&& git commit -qam 'chore: bump' && git push -q"], check=True)
+    # A new version lands upstream: the update shows what it changes and asks first.
+    assert sh("cd /tmp && rm -rf up && git clone -q /srv/ka.git up").returncode == 0
+    release("/tmp/up", "9.9.9", NEW)
     term.key("7")
-    term.expect("Actualizado de", 20)
+    term.expect("¿Actualizar ahora?", 20)
+    shown = term.since()
+    assert "Hay una versión nueva, la 9.9.9. Tienes la 1.0.1." in shown, shown[-1500:]
+    assert row("9.9.9", "Nuevo", "announce new versions with their changelog").search(shown), shown[-1500:]
+    assert row("23/10/2026", "", "and ask before updating").search(shown), shown[-1500:]
+    assert row("", "Arreglo", "keep the schedule when the menu opens").search(shown), shown[-1500:]
+    assert row("", "", "again after an update").search(shown), shown[-1500:]
+    assert all(len(line) <= 74 for line in shown.splitlines()), max(shown.splitlines(), key=len)
+    assert "run the terminal tests" not in shown and "github.com" not in shown and "#99" not in shown, shown[-1500:]
+    tables_line_up(shown)
+    term.key("n")
+    term.expect("No se actualizó")
+    term.key("0")
+    term.expect(PICK)
+    assert "Versión        1.0.1, hay una nueva, la 9.9.9" in term.since(), term.since()[-1500:]
+    assert "7  Actualizar agent-keepalive a la 9.9.9" in term.since(), term.since()[-1500:]
+    term.key("7")
+    term.expect("¿Actualizar ahora?", 20)
+    term.key("s")
+    term.expect("Actualizado de 1.0.1", 20)
     term.expect("El menú se abre otra vez con la versión nueva.")
     term.key("0")
     term.expect(PICK)
     after = term.since()
     assert "MI SERVIDOR" in after and "AVISO UNA VEZ" not in after
+    assert "Versión        9.9.9\n" in after and "hay una nueva" not in after, after[-1500:]
+    assert "7  Actualizar agent-keepalive\n" in after, after[-1500:]
     term.key("0")
     term.wait()
+
+
+def scratch_install(name):
+    """A second install of the code under test with an upstream of its own, for the update scenarios."""
+    base = f"/tmp/{name}"
+    done = sh(f"rm -rf {base} && mkdir -p {base} && git clone -q --bare /srv/ka.git {base}/up.git "
+              f"&& git clone -q {base}/up.git {base}/kit && git clone -q {base}/up.git {base}/work "
+              f"&& cp {KIT}/config.sh {base}/kit/config.sh")
+    assert done.returncode == 0, done.stderr
+    return base
+
+
+def update(base, *args):
+    return subprocess.run(["bash", f"{base}/kit/keepalive", "update", *args], capture_output=True, text=True,
+                          stdin=subprocess.DEVNULL)
+
+
+def head(base, ref="HEAD"):
+    return sh(f"git -C {base}/kit rev-parse {ref}").stdout.strip()
+
+
+def t_update_scenarios():
+    saved = crontab()  # an update rewrites the crontab for the install it runs from
+    try:
+        # main rewritten upstream with the same files, as when commit messages are cleaned: nothing to bring in,
+        # and the install follows the new history without touching the person's files.
+        base = scratch_install("rewrite")
+        settings = open(f"{base}/kit/config.sh").read()
+        done = sh(f"cd {base}/work && FILTER_BRANCH_SQUELCH_WARNING=1 git filter-branch -f --msg-filter "
+                  f"'cat; echo; echo rewritten' -- main && git push -qf origin main")
+        assert done.returncode == 0 and head(base) != sh(f"git -C {base}/work rev-parse HEAD").stdout.strip(), done.stderr
+        done = update(base, "--yes")
+        plain = ANSI.sub("", done.stdout)
+        assert done.returncode == 0 and "Ya tienes la versión más reciente" in plain, plain
+        assert head(base) == head(base, "origin/main"), plain
+        assert open(f"{base}/kit/config.sh").read() == settings
+        # A rewrite plus a new version still updates, with no "not possible to fast-forward".
+        current = open(f"{base}/kit/version.txt").read().strip()
+        release(f"{base}/work", "10.0.0", NEW)
+        done = update(base, "--yes")
+        plain = ANSI.sub("", done.stdout)
+        assert done.returncode == 0 and f"Actualizado de {current}" in plain and "a 10.0.0" in plain, plain
+        assert head(base) == head(base, "origin/main") and open(f"{base}/kit/config.sh").read() == settings
+        assert f"{base}/kit/session-starter.sh morning claude" in crontab(), crontab()  # the new code wrote it
+        # A version with only internal changes says so in one row.
+        release(f"{base}/work", "10.0.1", {"Documentation": [("docs", "explain the update screen")]})
+        assert sh(f"git -C {base}/kit fetch -q origin main").returncode == 0
+        table = sh(f"cd {base}/kit && SCRIPT_DIR={base}/kit; . ./lib.sh; source <(sed -n '/^SEP=/,/^T_UNKNOWN_COMMAND/p' keepalive); "
+                   f"eval \"$(sed -n '/^_wrap() {{/,/^_version() {{/p' keepalive | sed '$d')\"; "
+                   f"git show origin/main:CHANGELOG.md | _changes_table 10.0.0 10.0.1").stdout
+        assert row("10.0.1", "Interno", "Cambios internos, nada cambia al usarlo").search(ANSI.sub("", table)), table
+
+        # A copy ahead of main, as a test copy is, has nothing to bring in.
+        base = scratch_install("ahead")
+        done = sh(f"cd {base}/kit && echo 99.0.0 > version.txt && git commit -qam 'chore(release): 99.0.0'")
+        assert done.returncode == 0, done.stderr
+        done = update(base, "--yes")
+        plain = ANSI.sub("", done.stdout)
+        assert done.returncode == 0 and "Ya tienes la versión más reciente, 99.0.0" in plain, plain
+
+        # An install with no version.txt, from before the versions had a number, sees every version.
+        base = scratch_install("bare")
+        assert sh(f"rm {base}/kit/version.txt").returncode == 0
+        release(f"{base}/work", "10.0.0", NEW)
+        done = update(base, "--yes")
+        plain = ANSI.sub("", done.stdout)
+        assert "Hay una versión nueva, la 10.0.0.\n" in plain and "Tienes la" not in plain, plain
+        assert row("1.0.1", "Arreglo", "ask again for the Claude account until it").search(plain), plain
+
+        # With nothing new, an update still writes a hand edit of config.sh into the crontab.
+        settings = config()
+        try:
+            set_config(re.sub(r"(?m)^MORNING_HOUR=.*$", "MORNING_HOUR=5", settings))
+            done = subprocess.run(["keepalive", "update", "--yes"], capture_output=True, text=True, stdin=subprocess.DEVNULL)
+            assert done.returncode == 0 and "Ya tienes la versión más reciente" in ANSI.sub("", done.stdout), done.stdout
+            assert re.search(rf"(?m)^\d+ 5 \* \* \S+ {KIT}/session-starter.sh morning claude$", crontab()), crontab()
+        finally:
+            set_config(settings)
+            subprocess.run(["keepalive", "update", "--yes"], capture_output=True, stdin=subprocess.DEVNULL)
+
+        # Commits of its own: nothing moves and it says why.
+        base = scratch_install("own")
+        done = sh(f"cd {base}/kit && echo '# mine' >> README.md && git commit -qam 'mine'")
+        assert done.returncode == 0, done.stderr
+        release(f"{base}/work", "10.0.0", NEW)
+        before = head(base)
+        done = update(base, "--yes")
+        plain = ANSI.sub("", done.stdout)
+        assert done.returncode == 1 and "commits propios que no están en GitHub" in plain, plain
+        assert head(base) == before and "# mine" in open(f"{base}/kit/README.md").read()
+
+        # Hand edits to a tracked file are kept in the stash, and the update goes through.
+        base = scratch_install("edits")
+        assert sh(f"echo '# a note' >> {base}/kit/README.md").returncode == 0
+        release(f"{base}/work", "10.0.0", NEW)
+        done = update(base, "--yes")
+        plain = ANSI.sub("", done.stdout)
+        assert done.returncode == 0 and "Actualizado de" in plain and "quedaron guardados" in plain, plain
+        assert "before updating" in sh(f"git -C {base}/kit stash list").stdout
+        assert "# a note" not in open(f"{base}/kit/README.md").read()
+
+        # No network: the update says so and nothing changes.
+        base = scratch_install("offline")
+        assert sh(f"git -C {base}/kit remote set-url origin /nowhere/agent-keepalive.git").returncode == 0
+        before = head(base)
+        done = update(base, "--yes")
+        plain = ANSI.sub("", done.stdout)
+        assert done.returncode == 1 and "No se pudo revisar GitHub" in plain and head(base) == before, plain
+        lib = f"SCRIPT_DIR={base}/kit; . {base}/kit/lib.sh"
+        assert sh(f"{lib}; check_update").returncode != 0
+        assert sh(f"touch {base}/kit/.git/FETCH_HEAD; {lib}; check_update --if-stale").returncode == 0  # checked today
+
+        # A remote that never answers: the menu and a send do not wait for it.
+        base = scratch_install("hang")
+        assert sh("git config --global protocol.ext.allow always").returncode == 0
+        assert sh(f"git -C {base}/kit remote set-url origin 'ext::sh -c sleep\\ 50' && rm -f {base}/kit/.git/FETCH_HEAD"
+                  ).returncode == 0
+        started = time.time()
+        term = Term(f"bash {base}/kit/keepalive", ENV)
+        term.expect(PICK, 5)
+        assert time.time() - started < 5
+        term.key("0")
+        term.wait()
+        started = time.time()
+        done = sh(f"bash {base}/kit/session-starter.sh morning claude")
+        assert done.returncode == 0 and time.time() - started < 10, (done.returncode, time.time() - started)
+        assert "] OK" in open(f"{base}/kit/sessions.log").read()
+    finally:
+        sh("git config --global --unset protocol.ext.allow")
+        subprocess.run(["crontab", "-"], input=saved, text=True)
+
+
+def t_changelog():
+    done = subprocess.run(["keepalive", "changelog"], capture_output=True, text=True, stdin=subprocess.DEVNULL)
+    plain = ANSI.sub("", done.stdout)
+    assert done.returncode == 0 and "CAMBIOS DE CADA VERSIÓN" in plain, plain
+    assert row("Versión", "Tipo", "Cambio").search(plain), plain
+    assert row("1.0.1", "Arreglo", "ask again for the Claude account until it").search(plain), plain
+    assert row("21/10/2026", "", "is a plain email").search(plain), plain
+    assert row("1.0.0", "Resumen", "La primera versión con número, con lo que").search(plain), plain
+    assert "publish each version with Release Please" not in plain and "github.com" not in plain, plain
+    assert "Cada cambio va como quedó en CHANGELOG.md, en inglés." in plain
+    tables_line_up(plain)
+    assert all(len(line) <= 74 for line in plain.splitlines()), max(plain.splitlines(), key=len)
+    done = subprocess.run(["keepalive", "help"], capture_output=True, text=True)
+    assert "keepalive changelog" in done.stdout
 
 
 def t_renewal_and_old_language():
