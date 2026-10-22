@@ -100,7 +100,7 @@ Un arreglo urgente es un PR `fix` normal contra `main`. Al fusionarlo llega a ca
 Para pedir un número exacto, el commit lleva el pie `Release-As:`.
 
 ```text
-fix(cron): keep the schedule when the language changes
+fix(cron): keep the schedule when the agents change
 
 Release-As: 1.0.2
 ```
