@@ -1,7 +1,7 @@
 ---
-status: "proposed"
+status: "accepted"
 date: 2026-10-22
-decision-makers: el desarrollador
+decision-makers: JohnyDeCoder
 spec: "13"
 ---
 
