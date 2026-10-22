@@ -20,42 +20,70 @@ git clone https://github.com/JDCloud-Ecosystem/agent-keepalive.git ~/projects/ag
 bash ~/projects/agent-keepalive/install.sh
 ```
 
-El instalador pide el idioma, instala lo que falte (git, cron, whiptail, Node.js, Claude Code y Codex),
-crea `config.sh` con el horario por defecto, registra el cron y deja disponible el comando `keepalive`.
+El instalador instala lo que falte (git, cron, Node.js, Claude Code y Codex), crea
+`config.sh` con el horario por defecto, registra el cron y deja disponible el comando `keepalive`.
 El horario por defecto es a las 07:00 y 12:00, de lunes a viernes, solo con Claude.
 
 Después conecta tus agentes, como se explica abajo.
 
 ---
 
-## Un solo comando
+## El menú
 
-`keepalive` sin nada más abre un menú. También acepta cada acción directa:
+`keepalive` sin nada más abre un menú. Arriba muestra el horario, cuándo es el próximo envío y una tabla con
+cada agente, su etiqueta, su cuenta y su último envío, y debajo cada opción con su número, en grupos. Lo que
+haya que arreglar aparece justo debajo de la tabla.
 
-| Comando                   | Qué hace                                                        |
-| ------------------------- | --------------------------------------------------------------- |
-| `keepalive status`        | Cada agente con su etiqueta de color, su cuenta y su último envío |
-| `keepalive login [agente]`| Conecta un agente; sin nombre, pregunta cuál                    |
-| `keepalive logout [agente]`| Cierra la sesión de un agente en esta máquina; `--yes` no pregunta |
-| `keepalive schedule`      | Cambia las horas, los días y qué agentes reciben el envío       |
-| `keepalive test`          | Hace un envío real a cada agente elegido y revisa el resultado  |
-| `keepalive log [agente]`  | Muestra los últimos envíos                                      |
-| `keepalive update`        | Baja la versión más reciente sin tocar tu horario               |
-| `keepalive uninstall`     | Quita el cron, la configuración y el comando                    |
+| Grupo                | Opciones                                                                     |
+| -------------------- | ---------------------------------------------------------------------------- |
+| Sesiones automáticas | Probar ahora, ver el historial y cambiar el horario o los agentes            |
+| Cuentas              | Conectar o cambiar una cuenta y cerrar la sesión de una                      |
+| Actualizar           | Claude Code, Codex y OpenCode, o agent-keepalive                             |
+| Terminal             | Usar la terminal, donde `menu` regresa al menú                               |
 
-En `keepalive status` la etiqueta de cada agente dice de un vistazo cómo va:
+Cada pantalla lleva su título en mayúsculas entre dos líneas, y en todas `0` vuelve a la anterior. Una opción se
+elige con su tecla, sin Enter. Enter solo hace falta donde se escriben varios números, una hora o un nombre.
+Probar ahora pregunta antes de enviar, porque el envío abre la ventana de uso de cada agente en ese momento.
+Todo está en español.
+
+Un programa que abre el menú por alguien, como una puerta de entrada por SSH, puede poner su propio encabezado
+arriba de cada pantalla con `KEEPALIVE_HEADER`, un aviso solo en la primera con `KEEPALIVE_NOTICE`, los dos en
+base64, y el nombre de la opción `0` con `KEEPALIVE_EXIT_LABEL`.
+
+## Los comandos
+
+Cada opción del menú también se corre directa.
+
+| Comando                     | Qué hace                                                            |
+| --------------------------- | ------------------------------------------------------------------- |
+| `keepalive status`          | El horario, el próximo envío y la tabla de agentes, con su sesión      |
+| `keepalive login [agente]`  | Conecta un agente, y sin nombre pregunta cuál                       |
+| `keepalive logout [agente]` | Cierra la sesión de un agente en esta máquina, y con `--yes` no pregunta |
+| `keepalive schedule`        | Cambia los días, las horas y qué agentes reciben el envío           |
+| `keepalive test`            | Hace un envío real a cada agente elegido y revisa el resultado      |
+| `keepalive log [agente]`    | Muestra los últimos envíos                                          |
+| `keepalive update`          | Baja la versión más reciente de agent-keepalive sin tocar tu horario |
+| `keepalive update-agents`   | Actualiza Claude Code, Codex y OpenCode sin tocar sus sesiones      |
+| `keepalive uninstall`       | Quita el cron, la configuración y el comando                        |
+
+`keepalive update-agents` usa `sudo` cuando los agentes se instalaron para todo el sistema, y deja para
+después el que esté abierto en ese momento.
+
+La etiqueta de cada agente dice de un vistazo cómo va:
 
 | Etiqueta     | Color    | Significa                                                     |
 | ------------ | -------- | ------------------------------------------------------------- |
 | `OK`         | verde    | Tiene sesión y el último envío salió bien                     |
 | `FALLÓ`      | rojo     | El último envío falló o el agente no está instalado           |
-| `SIN SESIÓN` | rojo     | Falta conectarlo; al lado aparece el comando                  |
+| `SIN SESIÓN` | rojo     | Falta conectarlo, y debajo de la tabla dice cómo              |
 | `LÍMITE`     | amarillo | La cuenta llegó a su límite semanal y se libera sola          |
 | `ESPERA`     | cian     | Tiene sesión, pero todavía no le toca su primer envío         |
 | `FUERA`      | gris     | No participa en la sesión automática                          |
 
-Debajo de cada agente aparece su cuenta: el correo y el plan para Claude y Codex, y el proveedor para
-OpenCode.
+La etiqueta es texto de color, sin fondo, para que se lea en cualquier tema de la terminal. Junto a cada agente
+aparece su cuenta, con el correo y el plan para Claude y Codex y el proveedor para OpenCode, y su último envío.
+`keepalive status` suma la columna de la sesión, con la fecha en que vence la de Claude. Debajo de la tabla va
+una línea por cada agente que necesita algo, con lo que hay que hacer.
 
 ---
 
@@ -130,7 +158,6 @@ Los logs se recortan solos al llegar a 200 líneas.
 `config.sh` se crea al instalar y `keepalive schedule` lo mantiene. También se puede editar a mano:
 
 ```bash
-LANGUAGE="es"            # es o en
 MORNING_HOUR=7           # 0 a 23
 MORNING_MINUTE=0         # 0 a 59
 MORNING_ENABLED=true
@@ -154,11 +181,12 @@ Después de editarlo a mano, `keepalive update` vuelve a escribir el cron.
 | Archivo              | Qué es                                                         |
 | -------------------- | -------------------------------------------------------------- |
 | `keepalive`          | El comando; `install.sh` lo enlaza en `~/.local/bin`           |
-| `lib.sh`             | Lo que comparten los scripts: agentes, sesiones y cron         |
+| `lib.sh`             | Lo que comparten los scripts: agentes, cron y cada pantalla    |
 | `session-starter.sh` | Lo que corre el cron, un envío por agente                      |
 | `login.sh`           | Conecta Claude por un año                                      |
 | `install.sh`         | Instala y registra el cron                                     |
-| `update-schedule.sh` | El editor de horario y agentes                                 |
+| `update-schedule.sh` | La pantalla de horario y agentes                               |
+| `terminal-rc.sh`     | El arranque de la terminal del menú, con `menu` para volver    |
 | `test.sh`            | La prueba completa                                             |
 | `uninstall.sh`       | Lo quita todo                                                  |
 | `config.sh`, `*.log` | Se generan al usarlo y git los ignora                          |
