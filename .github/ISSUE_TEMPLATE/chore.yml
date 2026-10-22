@@ -1,0 +1,112 @@
+name: "Chore (tarea técnica)"
+description: "Refactor, configuración, dependencias, CI o documentación técnica"
+title: "[Chore]: "
+labels: ["chore"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Tarea técnica
+        Para el trabajo que no le entrega nada nuevo a quien usa agent-keepalive, como un refactor, una
+        actualización de dependencias, la configuración, el CI o la documentación técnica.
+        **No necesita spec**, pero sí una justificación y un criterio de completado claro.
+
+  - type: dropdown
+    id: type
+    attributes:
+      label: Tipo de tarea
+      options:
+        - "Refactor"
+        - "Configuración"
+        - "Actualización de dependencias"
+        - "Documentación"
+        - "Testing"
+        - "CI/CD"
+        - "Seguridad"
+        - "Otro"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Prioridad
+      options:
+        - "P0, crítico (bloquea el desarrollo o una versión)"
+        - "P1, alto"
+        - "P2, medio"
+        - "P3, bajo"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: stack
+    attributes:
+      label: Stack afectado
+      options:
+        - label: "Scripts (`keepalive`, `lib/`, `scripts/`)"
+        - label: "Pruebas (`tests/`)"
+        - label: "Release / CI (`.github/`)"
+        - label: "Documentación (`docs/`, `README.md`, `AGENTS.md`)"
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Descripción
+      description: "¿Qué hay que hacer y por qué? Incluye el impacto si no se hace."
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Criterio de completado
+      description: "¿Cómo se sabe que la tarea está terminada?"
+      placeholder: |
+        - [ ] ...
+        - [ ] bash tests/lint.sh y bash tests/run.sh en verde
+        - [ ] Una instalación de la versión anterior sigue enviando después de actualizar
+    validations:
+      required: true
+
+  - type: textarea
+    id: edge-cases
+    attributes:
+      label: Casos límite y peores escenarios
+      description: |
+        Qué se rompe si este cambio sale mal, y por dónde. Enumera todo, y qué llega a `tests/` se
+        decide con AGENTS.md, «Tests That Earn Their Place». Lo que no se codifique queda escrito como
+        caso analizado y descartado, con su motivo.
+      placeholder: |
+        - Qué deja de funcionar si el cambio se aplica a medias
+        - Qué ve una instalación que actualiza desde la versión anterior
+        - Qué otra parte depende de esto sin que se note en el diff, como el cron o un programa que lee los logs
+        - Cómo se revierte si falla después de fusionar, cuando ya llegó a las instalaciones
+    validations:
+      required: true
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notas adicionales
+      description: "Riesgos, dependencias o contexto que quien revisa debe conocer"
+
+  - type: markdown
+    attributes:
+      value: |
+        ---
+        ## Rama y PR
+
+        El prefijo depende del **Tipo de tarea**.
+
+        | Tipo de tarea | Rama | Tipo de commit |
+        |---|---|---|
+        | Refactor | `refactor/{N}-{english-slug}` | `refactor` |
+        | Configuración, dependencias, seguridad u otro | `chore/{N}-{english-slug}` | `chore` |
+        | Documentación | `docs/{N}-{english-slug}` | `docs` |
+        | Testing | `test/{N}-{english-slug}` | `test` |
+        | CI/CD | `ci/{N}-{english-slug}` | `ci` |
+
+        Desde `main`, y el PR apunta a `main`. **Título del PR** `<type>(<scope>): <descripción en inglés>`
+
+        La convención completa (tipos de rama, flujo y labels) está en https://github.com/JDCloud-Ecosystem/agent-keepalive/blob/main/docs/GITHUB-WORKFLOW.md

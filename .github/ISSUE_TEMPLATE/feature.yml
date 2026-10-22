@@ -1,0 +1,121 @@
+name: "Vertical Slice (funcionalidad)"
+description: "Pedir una funcionalidad nueva o un cambio de comportamiento de agent-keepalive"
+title: "[Slice]: "
+labels: ["feature", "needs-spec"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Vertical Slice
+        Cada Slice entrega algo completo para quien usa agent-keepalive (comando, pantalla, envío o datos, según
+        aplique).
+        **Regla Spec-First.** Sin una spec aprobada en `docs/specs/features/` no se escribe código.
+        La spec tiene que existir y decir `status: approved` antes de pasar esta issue a `ready-to-code`.
+
+  - type: input
+    id: spec
+    attributes:
+      label: Spec asociado
+      description: "Ruta en docs/specs/features/, con el número de esta issue (se crea antes de implementar)"
+      placeholder: "docs/specs/features/21-pause-for-a-day.md"
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Prioridad
+      options:
+        - "P0, crítico"
+        - "P1, alto"
+        - "P2, medio"
+        - "P3, bajo"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: type
+    attributes:
+      label: Tipo de cambio
+      options:
+        - "Menú y comandos"
+        - "Envío de sesiones"
+        - "Datos de la instalación (configuración, logs, cron)"
+        - "Instalación"
+        - "Otro"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Parte afectada
+      options:
+        - "Menú y pantallas"
+        - "Sesiones automáticas (cron)"
+        - "Cuentas e inicio de sesión"
+        - "Instalación y actualización"
+        - "Release y CI"
+        - "Otro"
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Descripción de la funcionalidad
+      description: "¿Qué debe hacer este Slice? El flujo completo, desde lo que ve la persona en su terminal"
+      placeholder: |
+        Como [persona que usa agent-keepalive], quiero [acción] para [beneficio].
+
+        Flujo:
+        1. La persona abre el menú...
+        2. keepalive muestra...
+        3. Al elegir...
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Criterios de aceptación
+      description: "¿Qué debe cumplirse para dar este Slice por terminado?"
+      placeholder: |
+        - [ ] Dado [...], cuando [...], entonces [...]
+        - [ ] Funciona igual desde el cron, sin terminal
+        - [ ] Una instalación de la versión anterior sigue enviando después de actualizar
+        - [ ] Cada texto nuevo en español, sin dos puntos ni punto y coma dentro de una oración
+    validations:
+      required: true
+
+  - type: textarea
+    id: edge-cases
+    attributes:
+      label: Casos límite y peores escenarios
+      description: |
+        Todo lo que puede salir mal, no solo lo que se va a probar. El análisis es exhaustivo, y qué
+        llega a `tests/` se decide después con AGENTS.md, «Tests That Earn Their Place». Lo que no se
+        codifique queda escrito en la spec como caso analizado y descartado, con su motivo.
+      placeholder: |
+        - El cron, sin terminal y con un PATH corto
+        - Un agente sin instalar o sin sesión, sin red, una respuesta vacía
+        - Dos envíos en el mismo minuto, una terminal angosta, una configuración editada a mano
+        - Una instalación de la versión anterior que actualiza a esta
+        - Peor escenario, qué deja de enviar sin que nadie lo note
+    validations:
+      required: true
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notas adicionales
+      description: "Dependencias, restricciones, decisiones previas o contexto extra"
+
+  - type: markdown
+    attributes:
+      value: |
+        ---
+        ## Rama y PR
+
+        - **Rama** `feature/{N}-{english-slug}`, desde `main`, y el PR apunta a `main`.
+        - **Título del PR** `feat(<scope>): <descripción en inglés>`
+
+        La convención completa (tipos de rama, flujo y labels) está en https://github.com/JDCloud-Ecosystem/agent-keepalive/blob/main/docs/GITHUB-WORKFLOW.md

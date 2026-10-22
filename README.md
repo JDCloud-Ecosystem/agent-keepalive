@@ -178,20 +178,21 @@ Después de editarlo a mano, `keepalive update` vuelve a escribir el cron.
 
 ## Archivos
 
-| Archivo              | Qué es                                                         |
-| -------------------- | -------------------------------------------------------------- |
-| `keepalive`          | El comando; `install.sh` lo enlaza en `~/.local/bin`           |
-| `lib.sh`             | Lo que comparten los scripts: agentes, cron y cada pantalla    |
-| `session-starter.sh` | Lo que corre el cron, un envío por agente                      |
-| `login.sh`           | Conecta Claude por un año                                      |
-| `install.sh`         | Instala y registra el cron                                     |
-| `update-schedule.sh` | La pantalla de horario y agentes                               |
-| `terminal-rc.sh`     | El arranque de la terminal del menú, con `menu` para volver    |
-| `test.sh`            | La prueba completa                                             |
-| `uninstall.sh`       | Lo quita todo                                                  |
-| `config.sh`, `*.log` | Se generan al usarlo y git los ignora                          |
-| `version.txt`        | La versión instalada; la escribe Release Please                |
-| `package.json`       | Revisa los commits de quien contribuye; los scripts no usan Node |
+| Archivo              | Qué es                                                                       |
+| -------------------- | ---------------------------------------------------------------------------- |
+| `keepalive`          | El comando; `install.sh` lo enlaza en `~/.local/bin`                         |
+| `lib.sh`             | Lo que comparten los scripts: agentes, cron y cada pantalla                  |
+| `session-starter.sh` | Lo que corre el cron, un envío por agente                                    |
+| `login.sh`           | Conecta Claude por un año                                                    |
+| `install.sh`         | Instala y registra el cron                                                   |
+| `update-schedule.sh` | La pantalla de horario y agentes                                             |
+| `terminal-rc.sh`     | El arranque de la terminal del menú, con `menu` para volver                  |
+| `test.sh`            | La prueba completa                                                           |
+| `tests/`             | Las pruebas de la terminal en un Ubuntu limpio, y la revisión de los scripts |
+| `uninstall.sh`       | Lo quita todo                                                                |
+| `config.sh`, `*.log` | Se generan al usarlo y git los ignora                                        |
+| `version.txt`        | La versión instalada; la escribe Release Please                              |
+| `package.json`       | Revisa los commits de quien contribuye; los scripts no usan Node             |
 
 ---
 
@@ -211,5 +212,7 @@ procesos en segundo plano, solo cron y bash. Probado en Ubuntu Server 22.04 y 24
 
 ## Contribuir
 
-Cómo se propone un cambio está en [CONTRIBUTING.md](CONTRIBUTING.md), y cómo sale cada versión, en
-[docs/RELEASE.md](docs/RELEASE.md). Los cambios de cada versión están en [CHANGELOG.md](CHANGELOG.md).
+Cada cambio empieza como una issue y llega por un pull request. Cómo se propone está en
+[CONTRIBUTING.md](CONTRIBUTING.md), el flujo completo en [docs/GITHUB-WORKFLOW.md](docs/GITHUB-WORKFLOW.md) y
+cómo sale cada versión en [docs/RELEASE.md](docs/RELEASE.md). Los cambios de cada versión están en
+[CHANGELOG.md](CHANGELOG.md), y las decisiones que no se ven en el código, en [docs/adr/](docs/adr/README.md).
