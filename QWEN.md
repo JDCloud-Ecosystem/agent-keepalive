@@ -14,7 +14,7 @@ Debian. Tested in a Docker container with Python driving a real terminal.
 2. `main` always works, because every install follows it
 3. Spec first: no implementation of a feature until the spec says `status: approved`
 4. LF line endings in every script
-5. Spanish only on screen, with no colon or semicolon inside a sentence
+5. Spanish only on screen, a colon only where Spanish expects one, never a semicolon
 6. No tokens or login codes in logs or output
 7. Never test on a real install; `tests/` runs in a container
 8. No AI attribution in commits, pull requests or files

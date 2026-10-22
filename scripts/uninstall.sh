@@ -8,7 +8,7 @@ load_config
 
 # ── String tables ─────────────────────────────────────────────────────────────
 T_TITLE="DESINSTALAR AGENT-KEEPALIVE"
-T_WHAT="Se quitan las entradas del crontab, config.sh, los historiales, el token de Claude y el comando keepalive."
+T_WHAT="Se quita todo esto: las entradas del crontab, config.sh, los historiales, el token de Claude y el comando keepalive."
 T_CONFIRM="¿Desinstalar por completo?"
 T_CLAUDE_Q="¿Desinstalar también Claude Code?"
 T_NODE_Q="¿Desinstalar también Node.js?"

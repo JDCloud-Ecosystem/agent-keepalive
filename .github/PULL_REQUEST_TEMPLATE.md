@@ -30,7 +30,7 @@ Closes #N
 
 ### Condicional, marcar solo las que apliquen a este PR
 
-- [ ] _(Pantallas)_ Cada texto nuevo en español, sin dos puntos ni punto y coma dentro de una oración, y cabe en 72 columnas
+- [ ] _(Pantallas)_ Cada texto nuevo en español, con dos puntos solo donde el español los espera y sin punto y coma, y cabe en 72 columnas
 - [ ] _(Envío o cron)_ Probado sin terminal, como lo corre el cron
 - [ ] _(Agentes)_ `keepalive test` en una máquina de prueba, con lo que respondió cada agente
 - [ ] _(Datos de la instalación)_ Una instalación de la versión anterior sigue enviando después de actualizar, con su horario y su historial

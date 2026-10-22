@@ -96,7 +96,7 @@ segundo plano, sin demorar el envío, y abrir el menú hace lo mismo si ya pasó
 dice junto a la versión instalada y la opción para actualizar dice a qué versión lleva.
 
 ```text
-  Versión        1.1.0, hay una nueva, la 1.2.0
+  Versión:       1.1.0, hay una nueva, la 1.2.0
 ```
 
 Esa opción, igual que `keepalive update`, muestra primero una tabla con los cambios de cada versión nueva,

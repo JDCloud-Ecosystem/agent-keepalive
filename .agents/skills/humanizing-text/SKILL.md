@@ -139,7 +139,8 @@ Before calling the text done:
 - Confirm the second pass ran, and say what it caught.
 - Confirm the result still has rhythm. Two consecutive paragraphs of uniformly short sentences fail this.
 - Confirm no identifier, commit message, variable name or log line was touched.
-- For text on a screen, confirm it is still Mexican Spanish, has no colon or semicolon inside a sentence, and
+- For text on a screen, confirm it is still Mexican Spanish, uses a colon only after a label, at the end of a
+  prompt or before a command, a list or a program's answer, has no semicolon, and
   still fits a 72-column terminal.
 - For prose under `docs/`, open every relative link, since a rewrite that cuts a sentence often cuts the link inside it.
 
