@@ -14,17 +14,17 @@ load_config
 
 T_TITLE="CONECTAR CLAUDE POR UN AÑO"
 T_STEPS="Se abre el inicio de sesión de Claude. Abre el enlace en tu navegador, autoriza y pega aquí el código."
-T_PASTE="No se pudo leer el token. Pega el que se mostró arriba, completo aunque ocupe varias líneas (empieza con sk-ant-oat01-), y pulsa Enter "
+T_PASTE="No se pudo leer el token. Pega el que se mostró arriba, completo aunque ocupe varias líneas (empieza con sk-ant-oat01-), y pulsa Enter:"
 T_BAD="Ese no es un token de Claude."
 T_CHECK="Comprobando el token."
-T_FAIL="Claude rechazó el token y no se guardó nada. Vuelve a intentarlo. Esto respondió Claude."
-T_LIMIT="Claude aceptó el token, pero la cuenta está en su límite de uso, así que se guarda igual. Esto respondió Claude."
+T_FAIL="Claude rechazó el token y no se guardó nada. Vuelve a intentarlo. Esto respondió Claude:"
+T_LIMIT="Claude aceptó el token, pero la cuenta está en su límite de uso, así que se guarda igual. Esto respondió Claude:"
 T_OK="Listo. Claude queda conectado hasta el %s, sin volver a iniciar sesión."
-T_NOTE="Las terminales nuevas ya lo usan. En una que ya estaba abierta escribe source ~/.bashrc."
+T_NOTE="Las terminales nuevas ya lo usan. En una que ya estaba abierta, escribe: source ~/.bashrc"
 T_WHO="¿Con qué cuenta de Claude entraste? Pulsa Enter si fue %s "
-T_WHO_NEW="¿Con qué cuenta de Claude entraste? Escribe su correo "
+T_WHO_NEW="¿Con qué cuenta de Claude entraste? Escribe su correo:"
 T_WHO_BAD="Eso no parece un correo. Escríbelo otra vez, sin acentos, o pulsa Enter para dejarlo en blanco."
-T_NO_CLAUDE="Claude Code no está instalado. Corre install.sh primero."
+T_NO_CLAUDE="Claude Code no está instalado. Para instalarlo, corre: keepalive install"
 
 agent_installed claude || { ui_fail "$T_NO_CLAUDE"; exit 1; }
 umask 077

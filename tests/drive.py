@@ -140,7 +140,7 @@ def t_menu_draws():
     term = menu()
     text = term.text()
     for needle in ("MI SERVIDOR", "Hola, tester.", "AVISO UNA VEZ", "SESIONES AUTOMÁTICAS DE TUS AGENTES",
-                   "Horario        a las 07:00 y 12:00, de lunes a viernes", "Próximo envío", "SESIONES AUTOMÁTICAS",
+                   "Horario:       a las 07:00 y 12:00, de lunes a viernes", "Próximo envío", "SESIONES AUTOMÁTICAS",
                    "1  Probar ahora", "3  Cambiar el horario o los agentes", "4  Conectar o cambiar una cuenta",
                    "6  Actualizar Claude Code, Codex y OpenCode", "8  Usar la terminal", "0  Volver al inicio",
                    "─" * 72):
@@ -178,7 +178,7 @@ def t_keys_need_no_enter():
 def t_terminal_and_back():
     term = menu()
     term.key("8")
-    term.expect("Escribe menu para volver al menú.")
+    term.expect("Para volver al menú, escribe: menu")
     time.sleep(0.5)
     term.send("echo dentro-$((40+2))")
     term.expect("dentro-42")
@@ -187,12 +187,12 @@ def t_terminal_and_back():
     term.send("menu")
     term.expect("8  Usar la terminal")
     term.key("8")
-    term.expect("Escribe menu para volver al menú.")
+    term.expect("Para volver al menú, escribe: menu")
     time.sleep(0.5)
     term.send("keepalive")
     term.expect(PICK)
     term.key("8")
-    term.expect("Escribe menu para volver")
+    term.expect("Para volver al menú, escribe")
     time.sleep(0.5)
     term.send("exit")
     term.expect(PICK)
@@ -214,7 +214,7 @@ def t_schedule():
     term.send("1-3 7")
     term.expect("Guardado, y el cron quedó al día.")
     assert 'WEEKDAYS="0,1,2,3"' in config(), config()
-    assert "Días       lunes, martes, miércoles y domingo" in term.since(), term.since()[-900:]
+    assert "Días:      lunes, martes, miércoles y domingo" in term.since(), term.since()[-900:]
     term.expect(PICK)
     term.key("2")
     term.expect("Escribe la hora")
@@ -356,7 +356,7 @@ def t_failed_run_shows_why():
             "«Conectar o cambiar una cuenta».") in text, text[-1500:]
     term.key("2")
     term.expect("0  Volver al menú")
-    assert re.search(r"│ FALLÓ\s+│ para arreglarlo corre keepalive login claude", term.since()), term.since()[-800:]
+    assert re.search(r"│ FALLÓ\s+│ para arreglarlo, corre: keepalive login claude", term.since()), term.since()[-800:]
     term.key("0")
     term.expect(PICK)
     term.key("0")
@@ -365,7 +365,7 @@ def t_failed_run_shows_why():
     plain = ANSI.sub("", full)
     assert row("Estado", "Agente", "Sesión", "Cuenta", "Último envío").search(plain), plain
     assert re.search(r"│ FALLÓ\s+│ Claude Code\s+│ hasta el \d\d/\d\d/\d{4}", plain), plain
-    assert "El último envío a Claude Code falló, para arreglarlo corre keepalive login claude." in plain, plain
+    assert "El último envío a Claude Code falló. Para arreglarlo, corre: keepalive login claude" in plain, plain
 
 
 def t_update_agents():
@@ -381,7 +381,7 @@ def t_update_agents():
     open("/var/lib/stub/npm-fails", "w").close()
     term.key("6")
     term.expect("0  Volver al menú", 30)
-    assert "No se pudo actualizar Codex. Esto respondió." in term.since() and "network request failed" in term.since()
+    assert "No se pudo actualizar Codex. Esto respondió:" in term.since() and "network request failed" in term.since()
     os.remove("/var/lib/stub/npm-fails")
     term.key("0")
     term.expect(PICK)
@@ -469,7 +469,7 @@ def t_update_repo():
     term.expect("No se actualizó")
     term.key("0")
     term.expect(PICK)
-    assert f"Versión        {current}, hay una nueva, la {new}" in term.since(), term.since()[-1500:]
+    assert f"Versión:       {current}, hay una nueva, la {new}" in term.since(), term.since()[-1500:]
     assert f"7  Actualizar agent-keepalive a la {new}" in term.since(), term.since()[-1500:]
     term.key("7")
     term.expect("¿Actualizar ahora?", 20)
@@ -480,7 +480,7 @@ def t_update_repo():
     term.expect(PICK)
     after = term.since()
     assert "MI SERVIDOR" in after and "AVISO UNA VEZ" not in after
-    assert f"Versión        {new}\n" in after and "hay una nueva" not in after, after[-1500:]
+    assert f"Versión:       {new}\n" in after and "hay una nueva" not in after, after[-1500:]
     assert "7  Actualizar agent-keepalive\n" in after, after[-1500:]
     term.key("0")
     term.wait()
@@ -543,7 +543,7 @@ def t_update_scenarios():
         assert done.returncode == 0, done.stderr
         done = update(base, "--yes")
         plain = ANSI.sub("", done.stdout)
-        assert done.returncode == 0 and f"Ya tienes la versión más reciente, {ahead}" in plain, plain
+        assert done.returncode == 0 and f"Ya tienes la versión más reciente: {ahead}" in plain, plain
 
         # An install with no version.txt, from before the versions had a number, sees every version.
         base = scratch_install("bare")
@@ -763,7 +763,8 @@ def t_without_terminal():
     plain = ANSI.sub("", done.stdout)
     assert "SESIONES AUTOMÁTICAS DE TUS AGENTES" in plain and PICK not in plain, plain
     assert "Último envío" in plain, plain
-    assert ";" not in plain and not re.search(r"[A-Za-zÁ-úñ]: ", plain), plain
+    assert ";" not in plain, plain
+    assert "Horario:       " in plain and "Próximo envío: " in plain and "Versión:       " in plain, plain
     done = subprocess.run(["keepalive", "schedule"], capture_output=True, text=True, stdin=subprocess.DEVNULL)
     assert "HORARIO Y AGENTES" in done.stdout and "Próximo" in done.stdout, done.stdout
     done = subprocess.run(["keepalive", "login"], capture_output=True, text=True, stdin=subprocess.DEVNULL)

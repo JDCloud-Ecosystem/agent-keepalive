@@ -13,13 +13,13 @@ C_BOLD=$'\033[1;37m' C_RESET=$'\033[0m'
 
 # shellcheck disable=SC2034  # for the scripts that source this file
 U_BACK="Volver"
-U_PICK="Elige una opción"; U_BACK_MENU="Volver al menú"
+U_PICK="Elige una opción:"; U_BACK_MENU="Volver al menú"
 U_AT="a las"; U_AND="y"; U_OFF="sin sesiones activas"; U_EVERY_DAY="todos los días"; U_WEEKDAYS="de lunes a viernes"
 U_DAYS=("domingo" "lunes" "martes" "miércoles" "jueves" "viernes" "sábado")
 U_TODAY="hoy"; U_TOMORROW="mañana"; U_ON="el"; U_IN="en"; U_DAY="día"; U_DAYS_UNIT="días"
 U_RUN_OK="salió bien"; U_RUN_LIMIT="la ventana ya estaba abierta"; U_RUN_ERROR="falló"
 U_RUN_WEEKLY="la cuenta llegó a su límite semanal"; U_RUN_SILENT="no respondió en 3 minutos"
-U_FIX="para arreglarlo corre"
+U_FIX="para arreglarlo, corre:"
 
 ui_clear() {
     [[ -t 1 ]] && printf '\033[2J\033[H'
