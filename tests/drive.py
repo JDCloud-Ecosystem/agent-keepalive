@@ -417,6 +417,26 @@ def release(work, version, sections):
     assert done.returncode == 0, done.stderr
 
 
+def installed(kit=KIT):
+    """The version an install has, from its version.txt."""
+    return open(f"{kit}/version.txt").read().strip()
+
+
+def later(version, majors=1):
+    """A version that comes after the given one, for the release a scenario pushes."""
+    return f"{int(version.split('.')[0]) + majors}.0.0"
+
+
+def patch_of(version):
+    major, minor, _ = version.split(".")
+    return f"{major}.{minor}.1"
+
+
+def changelog_versions(changelog):
+    """The versions of a CHANGELOG.md, newest first."""
+    return re.findall(r"(?m)^## \[?(\d+\.\d+\.\d+)", changelog)
+
+
 NEW = {"Features": [("update", "announce new versions with their changelog and ask before updating")],
        "Bug Fixes": [("menu", "keep the schedule when the menu opens again after an update")],
        "Continuous Integration": [("workflows", "run the terminal tests on every pull request")]}
@@ -431,12 +451,14 @@ def t_update_repo():
     term.expect(PICK)
     # A new version lands upstream: the update shows what it changes and asks first.
     assert sh("cd /tmp && rm -rf up && git clone -q /srv/ka.git up").returncode == 0
-    release("/tmp/up", "9.9.9", NEW)
+    current = installed()
+    new = later(current)
+    release("/tmp/up", new, NEW)
     term.key("7")
     term.expect("¿Actualizar ahora?", 20)
     shown = term.since()
-    assert "Hay una versión nueva, la 9.9.9. Tienes la 1.0.1." in shown, shown[-1500:]
-    assert row("9.9.9", "Nuevo", "announce new versions with their changelog").search(shown), shown[-1500:]
+    assert f"Hay una versión nueva, la {new}. Tienes la {current}." in shown, shown[-1500:]
+    assert row(new, "Nuevo", "announce new versions with their changelog").search(shown), shown[-1500:]
     assert row("23/10/2026", "", "and ask before updating").search(shown), shown[-1500:]
     assert row("", "Arreglo", "keep the schedule when the menu opens").search(shown), shown[-1500:]
     assert row("", "", "again after an update").search(shown), shown[-1500:]
@@ -447,18 +469,18 @@ def t_update_repo():
     term.expect("No se actualizó")
     term.key("0")
     term.expect(PICK)
-    assert "Versión        1.0.1, hay una nueva, la 9.9.9" in term.since(), term.since()[-1500:]
-    assert "7  Actualizar agent-keepalive a la 9.9.9" in term.since(), term.since()[-1500:]
+    assert f"Versión        {current}, hay una nueva, la {new}" in term.since(), term.since()[-1500:]
+    assert f"7  Actualizar agent-keepalive a la {new}" in term.since(), term.since()[-1500:]
     term.key("7")
     term.expect("¿Actualizar ahora?", 20)
     term.key("s")
-    term.expect("Actualizado de 1.0.1", 20)
+    term.expect(f"Actualizado de {current}", 20)
     term.expect("El menú se abre otra vez con la versión nueva.")
     term.key("0")
     term.expect(PICK)
     after = term.since()
     assert "MI SERVIDOR" in after and "AVISO UNA VEZ" not in after
-    assert "Versión        9.9.9\n" in after and "hay una nueva" not in after, after[-1500:]
+    assert f"Versión        {new}\n" in after and "hay una nueva" not in after, after[-1500:]
     assert "7  Actualizar agent-keepalive\n" in after, after[-1500:]
     term.key("0")
     term.wait()
@@ -498,37 +520,41 @@ def t_update_scenarios():
         assert head(base) == head(base, "origin/main"), plain
         assert config() == settings
         # A rewrite plus a new version still updates, with no "not possible to fast-forward".
-        current = open(f"{base}/kit/version.txt").read().strip()
-        release(f"{base}/work", "10.0.0", NEW)
+        current = installed(f"{base}/kit")
+        new = later(current)
+        release(f"{base}/work", new, NEW)
         done = update(base, "--yes")
         plain = ANSI.sub("", done.stdout)
-        assert done.returncode == 0 and f"Actualizado de {current}" in plain and "a 10.0.0" in plain, plain
+        assert done.returncode == 0 and f"Actualizado de {current}" in plain and f"a {new}" in plain, plain
         assert head(base) == head(base, "origin/main") and config() == settings
         assert f"{base}/kit/session-starter.sh morning claude" in crontab(), crontab()  # the new code wrote it
         # A version with only internal changes says so in one row.
-        release(f"{base}/work", "10.0.1", {"Documentation": [("docs", "explain the update screen")]})
+        release(f"{base}/work", patch_of(new), {"Documentation": [("docs", "explain the update screen")]})
         assert sh(f"git -C {base}/kit fetch -q origin main").returncode == 0
         table = sh(f"cd {base}/kit && KEEPALIVE_DIR={base}/kit; . ./lib/load.sh; source <(sed -n '/^SEP=/,/^T_UNKNOWN_COMMAND/p' keepalive); "
                    f"eval \"$(sed -n '/^_wrap() {{/,/^_version() {{/p' keepalive | sed '$d')\"; "
-                   f"git show origin/main:CHANGELOG.md | _changes_table 10.0.0 10.0.1").stdout
-        assert row("10.0.1", "Interno", "Cambios internos, nada cambia al usarlo").search(ANSI.sub("", table)), table
+                   f"git show origin/main:CHANGELOG.md | _changes_table {new} {patch_of(new)}").stdout
+        assert row(patch_of(new), "Interno", "Cambios internos, nada cambia al usarlo").search(ANSI.sub("", table)), table
 
         # A copy ahead of main, as a test copy is, has nothing to bring in.
         base = scratch_install("ahead")
-        done = sh(f"cd {base}/kit && echo 99.0.0 > version.txt && git commit -qam 'chore(release): 99.0.0'")
+        ahead = later(installed(f"{base}/kit"), 50)
+        done = sh(f"cd {base}/kit && echo {ahead} > version.txt && git commit -qam 'chore(release): {ahead}'")
         assert done.returncode == 0, done.stderr
         done = update(base, "--yes")
         plain = ANSI.sub("", done.stdout)
-        assert done.returncode == 0 and "Ya tienes la versión más reciente, 99.0.0" in plain, plain
+        assert done.returncode == 0 and f"Ya tienes la versión más reciente, {ahead}" in plain, plain
 
         # An install with no version.txt, from before the versions had a number, sees every version.
         base = scratch_install("bare")
+        new = later(installed(f"{base}/kit"))
         assert sh(f"rm {base}/kit/version.txt").returncode == 0
-        release(f"{base}/work", "10.0.0", NEW)
+        release(f"{base}/work", new, NEW)
         done = update(base, "--yes")
         plain = ANSI.sub("", done.stdout)
-        assert "Hay una versión nueva, la 10.0.0.\n" in plain and "Tienes la" not in plain, plain
-        assert row("1.0.1", "Arreglo", "ask again for the Claude account until it").search(plain), plain
+        assert f"Hay una versión nueva, la {new}.\n" in plain and "Tienes la" not in plain, plain
+        older = changelog_versions(open(f"{base}/work/CHANGELOG.md").read())[1]  # the newest one before it
+        assert re.search(rf"│ {re.escape(older)}\s*│", plain), plain
 
         # With nothing new, an update still writes a hand edit of config.sh into the crontab.
         settings = config()
@@ -545,7 +571,7 @@ def t_update_scenarios():
         base = scratch_install("own")
         done = sh(f"cd {base}/kit && echo '# mine' >> README.md && git commit -qam 'mine'")
         assert done.returncode == 0, done.stderr
-        release(f"{base}/work", "10.0.0", NEW)
+        release(f"{base}/work", later(installed(f"{base}/kit")), NEW)
         before = head(base)
         done = update(base, "--yes")
         plain = ANSI.sub("", done.stdout)
@@ -555,7 +581,7 @@ def t_update_scenarios():
         # Hand edits to a tracked file are kept in the stash, and the update goes through.
         base = scratch_install("edits")
         assert sh(f"echo '# a note' >> {base}/kit/README.md").returncode == 0
-        release(f"{base}/work", "10.0.0", NEW)
+        release(f"{base}/work", later(installed(f"{base}/kit")), NEW)
         done = update(base, "--yes")
         plain = ANSI.sub("", done.stdout)
         assert done.returncode == 0 and "Actualizado de" in plain and "quedaron guardados" in plain, plain
@@ -599,9 +625,14 @@ def t_changelog():
     plain = ANSI.sub("", done.stdout)
     assert done.returncode == 0 and "CAMBIOS DE CADA VERSIÓN" in plain, plain
     assert row("Versión", "Tipo", "Cambio").search(plain), plain
-    assert row("1.0.1", "Arreglo", "ask again for the Claude account until it").search(plain), plain
-    assert row("21/10/2026", "", "is a plain email").search(plain), plain
-    assert row("1.0.0", "Resumen", "La primera versión con número, con lo que").search(plain), plain
+    shown = [v for v in changelog_versions(open(f"{KIT}/CHANGELOG.md").read()) if v == installed()
+             or subprocess.run(["sort", "-V", "-C"], input=f"{v}\n{installed()}\n", text=True).returncode == 0][:5]
+    assert re.search(rf"│ {re.escape(shown[0])}\s*│", plain), plain
+    if "1.0.1" in shown:
+        assert row("1.0.1", "Arreglo", "ask again for the Claude account until it").search(plain), plain
+        assert row("21/10/2026", "", "is a plain email").search(plain), plain
+    if "1.0.0" in shown:
+        assert row("1.0.0", "Resumen", "La primera versión con número, con lo que").search(plain), plain
     assert "publish each version with Release Please" not in plain and "github.com" not in plain, plain
     assert "Cada cambio va como quedó en CHANGELOG.md, en inglés." in plain
     tables_line_up(plain)
