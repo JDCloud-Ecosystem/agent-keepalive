@@ -11,6 +11,7 @@ import time
 
 HOME = "/home/tester"
 KIT = f"{HOME}/projects/agent-keepalive"
+STATE = f"{HOME}/.config/agent-keepalive"
 ANSI = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]|\x1b\][^\x07]*\x07|\r")
 BACKGROUND = re.compile(r"\x1b\[(?:[0-9]+;)*(?:4[0-7]|10[0-7])(?:;[0-9]+)*m")
 PICK = "Elige una opción"
@@ -77,20 +78,26 @@ class Term:
         raise AssertionError("did not end")
 
 
+class Skip(Exception):
+    """A scenario that cannot run here, such as one that needs a tag the checkout does not have."""
+
+
 def check(name, function):
     try:
         function()
         results.append((name, True, ""))
+    except Skip as reason:
+        results.append((name, None, str(reason)))
     except Exception as error:  # noqa: BLE001
         results.append((name, False, str(error)[:2200]))
 
 
 def config():
-    return open(f"{KIT}/config.sh").read()
+    return open(f"{STATE}/config.sh").read()
 
 
 def set_config(text):
-    with open(f"{KIT}/config.sh", "w") as handle:
+    with open(f"{STATE}/config.sh", "w") as handle:
         handle.write(text)
 
 
@@ -461,8 +468,7 @@ def scratch_install(name):
     """A second install of the code under test with an upstream of its own, for the update scenarios."""
     base = f"/tmp/{name}"
     done = sh(f"rm -rf {base} && mkdir -p {base} && git clone -q --bare /srv/ka.git {base}/up.git "
-              f"&& git clone -q {base}/up.git {base}/kit && git clone -q {base}/up.git {base}/work "
-              f"&& cp {KIT}/config.sh {base}/kit/config.sh")
+              f"&& git clone -q {base}/up.git {base}/kit && git clone -q {base}/up.git {base}/work")
     assert done.returncode == 0, done.stderr
     return base
 
@@ -482,7 +488,7 @@ def t_update_scenarios():
         # main rewritten upstream with the same files, as when commit messages are cleaned: nothing to bring in,
         # and the install follows the new history without touching the person's files.
         base = scratch_install("rewrite")
-        settings = open(f"{base}/kit/config.sh").read()
+        settings = config()
         done = sh(f"cd {base}/work && FILTER_BRANCH_SQUELCH_WARNING=1 git filter-branch -f --msg-filter "
                   f"'cat; echo; echo rewritten' -- main && git push -qf origin main")
         assert done.returncode == 0 and head(base) != sh(f"git -C {base}/work rev-parse HEAD").stdout.strip(), done.stderr
@@ -490,19 +496,19 @@ def t_update_scenarios():
         plain = ANSI.sub("", done.stdout)
         assert done.returncode == 0 and "Ya tienes la versión más reciente" in plain, plain
         assert head(base) == head(base, "origin/main"), plain
-        assert open(f"{base}/kit/config.sh").read() == settings
+        assert config() == settings
         # A rewrite plus a new version still updates, with no "not possible to fast-forward".
         current = open(f"{base}/kit/version.txt").read().strip()
         release(f"{base}/work", "10.0.0", NEW)
         done = update(base, "--yes")
         plain = ANSI.sub("", done.stdout)
         assert done.returncode == 0 and f"Actualizado de {current}" in plain and "a 10.0.0" in plain, plain
-        assert head(base) == head(base, "origin/main") and open(f"{base}/kit/config.sh").read() == settings
+        assert head(base) == head(base, "origin/main") and config() == settings
         assert f"{base}/kit/session-starter.sh morning claude" in crontab(), crontab()  # the new code wrote it
         # A version with only internal changes says so in one row.
         release(f"{base}/work", "10.0.1", {"Documentation": [("docs", "explain the update screen")]})
         assert sh(f"git -C {base}/kit fetch -q origin main").returncode == 0
-        table = sh(f"cd {base}/kit && SCRIPT_DIR={base}/kit; . ./lib.sh; source <(sed -n '/^SEP=/,/^T_UNKNOWN_COMMAND/p' keepalive); "
+        table = sh(f"cd {base}/kit && KEEPALIVE_DIR={base}/kit; . ./lib/load.sh; source <(sed -n '/^SEP=/,/^T_UNKNOWN_COMMAND/p' keepalive); "
                    f"eval \"$(sed -n '/^_wrap() {{/,/^_version() {{/p' keepalive | sed '$d')\"; "
                    f"git show origin/main:CHANGELOG.md | _changes_table 10.0.0 10.0.1").stdout
         assert row("10.0.1", "Interno", "Cambios internos, nada cambia al usarlo").search(ANSI.sub("", table)), table
@@ -563,7 +569,7 @@ def t_update_scenarios():
         done = update(base, "--yes")
         plain = ANSI.sub("", done.stdout)
         assert done.returncode == 1 and "No se pudo revisar GitHub" in plain and head(base) == before, plain
-        lib = f"SCRIPT_DIR={base}/kit; . {base}/kit/lib.sh"
+        lib = f"KEEPALIVE_DIR={base}/kit; . {base}/kit/lib/load.sh"
         assert sh(f"{lib}; check_update").returncode != 0
         assert sh(f"touch {base}/kit/.git/FETCH_HEAD; {lib}; check_update --if-stale").returncode == 0  # checked today
 
@@ -578,10 +584,11 @@ def t_update_scenarios():
         assert time.time() - started < 5
         term.key("0")
         term.wait()
+        sent = open(f"{STATE}/logs/claude.log").read().count("] OK")
         started = time.time()
         done = sh(f"bash {base}/kit/session-starter.sh morning claude")
         assert done.returncode == 0 and time.time() - started < 10, (done.returncode, time.time() - started)
-        assert "] OK" in open(f"{base}/kit/sessions.log").read()
+        assert open(f"{STATE}/logs/claude.log").read().count("] OK") == sent + 1
     finally:
         sh("git config --global --unset protocol.ext.allow")
         subprocess.run(["crontab", "-"], input=saved, text=True)
@@ -601,6 +608,104 @@ def t_changelog():
     assert all(len(line) <= 74 for line in plain.splitlines()), max(plain.splitlines(), key=len)
     done = subprocess.run(["keepalive", "help"], capture_output=True, text=True)
     assert "keepalive changelog" in done.stdout
+
+
+LEGACY_CONFIG = "\n".join(["#!/bin/bash", "MORNING_HOUR=6", "MORNING_MINUTE=30", "MORNING_ENABLED=true",
+                           "AFTERNOON_ENABLED=false", "NIGHT_ENABLED=false", 'AGENTS="claude codex"',
+                           'WEEKDAYS="1,3,5"']) + "\n"
+
+
+def run_line(day, result):
+    return f"[{day} 06:30:01] [MORNING] {result}\n---\n"
+
+
+def t_moves_old_data():
+    # An install from before keeps config.sh and the logs next to the code; the first run moves them.
+    base, home = scratch_install("legacy"), "/tmp/legacy-home"
+    assert sh(f"rm -rf {home} && mkdir -p {home}").returncode == 0
+    with open(f"{base}/kit/config.sh", "w") as handle:
+        handle.write(LEGACY_CONFIG)
+    with open(f"{base}/kit/sessions.log", "w") as handle:
+        handle.write(run_line("2026-10-19", "OK: OK"))
+    with open(f"{base}/kit/codex-sessions.log", "w") as handle:
+        handle.write(run_line("2026-10-20", "LIMIT (window already active): soon"))
+    with open(f"{base}/kit/codex-sessions.log.tmp", "w") as handle:
+        handle.write("half a rotation")
+    done = subprocess.run(["bash", f"{base}/kit/keepalive", "status"], capture_output=True, text=True,
+                          stdin=subprocess.DEVNULL, env={**os.environ, "HOME": home})
+    plain = ANSI.sub("", done.stdout)
+    state = f"{home}/.config/agent-keepalive"
+    assert done.returncode == 0 and "a las 06:30, lunes, miércoles y viernes" in plain, plain
+    assert open(f"{state}/config.sh").read() == LEGACY_CONFIG
+    assert "2026-10-19" in open(f"{state}/logs/claude.log").read()
+    assert "2026-10-20" in open(f"{state}/logs/codex.log").read()
+    left = sh(f"ls -A {base}/kit").stdout.split()
+    assert not [name for name in left if name == "config.sh" or "sessions.log" in name], left
+    assert sh(f"stat -c %a {state}").stdout.strip() == "700"
+    # Two sends that start together, each finding the old files: both entries land, none is lost.
+    with open(f"{base}/kit/sessions.log", "w") as handle:
+        handle.write(run_line("2026-10-21", "OK: OK"))
+    with open(f"{base}/kit/config.sh", "w") as handle:
+        handle.write(LEGACY_CONFIG.replace("06:30", "x").replace("MORNING_HOUR=6", "MORNING_HOUR=9"))
+    env = {**os.environ, "HOME": home}
+    first = subprocess.Popen(["bash", f"{base}/kit/session-starter.sh", "morning", "claude"], env=env)
+    second = subprocess.Popen(["bash", f"{base}/kit/session-starter.sh", "afternoon", "claude"], env=env)
+    first.wait(30), second.wait(30)
+    log = open(f"{state}/logs/claude.log").read()
+    assert "2026-10-19" in log and "2026-10-21" in log and "[MORNING]" in log and "[AFTERNOON]" in log, log
+    assert open(f"{state}/config.sh").read() == LEGACY_CONFIG  # the one already moved wins
+    assert not sh(f"ls {base}/kit/config.sh {base}/kit/sessions.log 2>/dev/null").stdout
+
+
+def t_update_from_1_0_1():
+    # The published 1.0.1 updates to this code with its own keepalive update, then keeps sending as before.
+    if not os.path.isdir("/srv/v101"):
+        raise Skip("the checkout has no v1.0.1 tag (fetch it with git fetch --tags)")
+    base, home = "/tmp/from101", "/tmp/from101-home"
+    saved = crontab()
+    try:
+        done = sh(f"rm -rf {base} {home} && mkdir -p {base} {home} && cp -a /srv/v101 {base}/work && cd {base}/work "
+                  f"&& git init -q -b main && git add -A && git -c core.hooksPath=/dev/null commit -qm 'chore(release): 1.0.1' "
+                  f"&& git clone -q --bare . {base}/up.git && git remote add origin {base}/up.git "
+                  f"&& git clone -q {base}/up.git {base}/kit")
+        assert done.returncode == 0, done.stderr
+        env = {**os.environ, "HOME": home}
+        assert sh(f"mkdir -p {home}/.config/agent-keepalive && cp {STATE}/claude-token {STATE}/claude-token.created "
+                  f"{home}/.config/agent-keepalive/").returncode == 0
+        with open(f"{base}/kit/config.sh", "w") as handle:
+            handle.write(LEGACY_CONFIG)
+        with open(f"{base}/kit/sessions.log", "w") as handle:
+            handle.write(run_line("2026-10-19", "OK: OK"))
+        assert subprocess.run(["bash", "-c", f"SCRIPT_DIR={base}/kit; . {base}/kit/lib.sh; write_crontab"],
+                              env=env).returncode == 0
+        old_lines = [line for line in crontab().splitlines() if f"{base}/kit" in line]
+        assert len(old_lines) == 2, crontab()
+        # This version lands upstream, as a merge to main would bring it.
+        done = sh(f"cd {base}/work && git rm -rq . && tar -C /srv/work --exclude=./.git -cf - . | tar -xf - && git add -A . "
+                  f"&& git -c core.hooksPath=/dev/null commit -qm 'refactor(layout): this version' && git push -q origin main")
+        assert done.returncode == 0, done.stderr + done.stdout
+        done = subprocess.run(["bash", f"{base}/kit/keepalive", "update"], capture_output=True, text=True,
+                              stdin=subprocess.DEVNULL, env=env)
+        assert done.returncode == 0 and "Actualizado" in ANSI.sub("", done.stdout), done.stdout + done.stderr
+        assert os.path.isfile(f"{base}/kit/lib/load.sh") and not os.path.exists(f"{base}/kit/lib.sh")
+        assert [line for line in crontab().splitlines() if f"{base}/kit" in line] == old_lines, crontab()
+        # The cron's next send runs the new code, which moves the data and sends as always.
+        done = subprocess.run(["bash", f"{base}/kit/session-starter.sh", "morning", "claude"], env=env,
+                              capture_output=True, text=True)
+        state = f"{home}/.config/agent-keepalive"
+        log = open(f"{state}/logs/claude.log").read()
+        assert done.returncode == 0 and "2026-10-19" in log and log.count("] OK") == 2, log + done.stderr
+        assert open(f"{state}/config.sh").read() == LEGACY_CONFIG
+        done = subprocess.run(["bash", f"{base}/kit/keepalive", "status"], capture_output=True, text=True,
+                              stdin=subprocess.DEVNULL, env=env)
+        plain = ANSI.sub("", done.stdout)
+        assert "a las 06:30, lunes, miércoles y viernes" in plain and "Versión" in plain, plain
+        # Its next update goes through the new path, which also rewrites the crontab with this version's code.
+        done = subprocess.run(["bash", f"{base}/kit/keepalive", "update", "--yes"], capture_output=True,
+                              text=True, stdin=subprocess.DEVNULL, env=env)
+        assert done.returncode == 0 and "Ya tienes la versión más reciente" in ANSI.sub("", done.stdout), done.stdout
+    finally:
+        subprocess.run(["crontab", "-"], input=saved, text=True)
 
 
 def t_renewal_and_old_language():
@@ -644,7 +749,7 @@ def t_without_terminal():
 
 
 def t_next_run():
-    lib = f"SCRIPT_DIR={KIT}; . {KIT}/lib.sh"
+    lib = f"KEEPALIVE_DIR={KIT}; . {KIT}/lib/load.sh"
     now = datetime.datetime.now()
 
     def run(slots, days):
@@ -676,7 +781,7 @@ def t_next_run():
 
 
 def t_keys_logic():
-    lib = f"SCRIPT_DIR={KIT}; . {KIT}/lib.sh"
+    lib = f"KEEPALIVE_DIR={KIT}; . {KIT}/lib/load.sh"
     cases = {("3", 8): "fits whole", ("0", 8): "fits whole", ("9", 8): "no", ("1", 12): "fits",
              ("12", 12): "fits whole", ("13", 12): "no", ("05", 9): "no"}
     for (typed, top), expected in cases.items():
@@ -687,8 +792,12 @@ def t_keys_logic():
 
 for name, function in [(n, f) for n, f in globals().items() if n.startswith("t_")]:
     check(name, function)
-failed = [r for r in results if not r[1]]
+failed = [r for r in results if r[1] is False]
 for name, ok, detail in results:
-    print(("PASS " if ok else "FAIL ") + name + ("" if ok else "\n" + detail))
-print(f"{len(results) - len(failed)}/{len(results)} passed")
+    if ok is None:
+        print(f"SKIP {name}, {detail}")
+    else:
+        print(("PASS " if ok else "FAIL ") + name + ("" if ok else "\n" + detail))
+ran = [r for r in results if r[1] is not None]
+print(f"{len(ran) - len(failed)}/{len(ran)} passed" + (f", {len(results) - len(ran)} skipped" if len(ran) < len(results) else ""))
 sys.exit(1 if failed else 0)
