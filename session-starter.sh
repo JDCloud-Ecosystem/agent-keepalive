@@ -9,6 +9,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib.sh"
 load_config
 migrate_token
+# Once a day a send also looks for a new version of agent-keepalive, in the background so it never delays the
+# send; the menu says so the next time it opens.
+check_update --if-stale >/dev/null 2>&1 &
 
 MAX_LINES="${MAX_LOG_LINES:-200}"
 TS=$(date '+%Y-%m-%d %H:%M:%S')
