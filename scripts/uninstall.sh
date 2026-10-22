@@ -1,12 +1,10 @@
 #!/bin/bash
 set -uo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=lib.sh
-source "$SCRIPT_DIR/lib.sh"
+KEEPALIVE_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+# shellcheck source=lib/load.sh
+source "$KEEPALIVE_DIR/lib/load.sh"
 load_config
-LOG_FILE="$SCRIPT_DIR/sessions.log"
-CODEX_LOG_FILE="$SCRIPT_DIR/codex-sessions.log"
 
 # ── String tables ─────────────────────────────────────────────────────────────
 T_TITLE="DESINSTALAR AGENT-KEEPALIVE"
@@ -44,12 +42,11 @@ fi
 # 2. Generated files, the year-long Claude token and its line in ~/.bashrc
 sed -i '/# >>> claude-keepalive token >>>/,/# <<< claude-keepalive token <<</d' "$HOME/.bashrc" 2>/dev/null || true
 sed -i '/# >>> agent-keepalive token >>>/,/# <<< agent-keepalive token <<</d' "$HOME/.bashrc" 2>/dev/null || true
-rm -rf "$HOME/.config/agent-keepalive"
-rm -f "$SCRIPT_DIR/.claude-token" "$SCRIPT_DIR/.claude-token.created" "$SCRIPT_DIR"/*-sessions.log*
-[[ "$(readlink -f "$HOME/.local/bin/keepalive" 2>/dev/null)" == "$SCRIPT_DIR/keepalive" ]] && rm -f "$HOME/.local/bin/keepalive"
-rm -f "$CONFIG_FILE" \
-      "$LOG_FILE"       "${LOG_FILE}.old"       "${LOG_FILE}.tmp" \
-      "$CODEX_LOG_FILE" "${CODEX_LOG_FILE}.old" "${CODEX_LOG_FILE}.tmp"
+# Everything the person kept lives in STATE_DIR; an install from before also left files next to the code.
+rm -rf "$STATE_DIR"
+rm -f "$KEEPALIVE_DIR/config.sh" "$KEEPALIVE_DIR/.claude-token" "$KEEPALIVE_DIR/.claude-token.created" \
+      "$KEEPALIVE_DIR"/sessions.log* "$KEEPALIVE_DIR"/*-sessions.log*
+[[ "$(readlink -f "$HOME/.local/bin/keepalive" 2>/dev/null)" == "$KEEPALIVE_DIR/keepalive" ]] && rm -f "$HOME/.local/bin/keepalive"
 ui_ok "$T_FILES_OK"
 
 # 3. Claude Code (optional)

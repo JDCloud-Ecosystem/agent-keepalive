@@ -4,9 +4,9 @@
 # Each agent runs in its own non-interactive mode. Claude uses the year-long token from `keepalive login claude`
 # when there is one, so the cron never renews (and never breaks) a login. Every run ends in the agent's log as
 # OK, LIMIT (a window was already open) or an ERROR that says what to run.
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=lib.sh
-source "$SCRIPT_DIR/lib.sh"
+KEEPALIVE_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+# shellcheck source=lib/load.sh
+source "$KEEPALIVE_DIR/lib/load.sh"
 load_config
 migrate_token
 # Once a day a send also looks for a new version of agent-keepalive, in the background so it never delays the
@@ -19,6 +19,7 @@ SESSION_TYPE="${1:-morning}"
 AGENT="${2:-claude}"
 PROMPT="Keepalive check. Reply with the single word OK."
 LOG_FILE="$(agent_log "$AGENT")"
+mkdir -p "$LOG_DIR"
 
 case "$SESSION_TYPE" in
     morning) SESSION_LABEL="MORNING" ;; afternoon) SESSION_LABEL="AFTERNOON" ;;
@@ -40,7 +41,10 @@ agent_logged_in "$AGENT" || _finish "ERROR: $(agent_title "$AGENT") is not logge
 
 LAST=$(mktemp)
 trap 'rm -f "$LAST"' EXIT
-[[ -s "$CLAUDE_TOKEN" ]] && export CLAUDE_CODE_OAUTH_TOKEN="$(cat "$CLAUDE_TOKEN")"
+if [[ -s "$CLAUDE_TOKEN" ]]; then
+    CLAUDE_CODE_OAUTH_TOKEN=$(cat "$CLAUDE_TOKEN")
+    export CLAUDE_CODE_OAUTH_TOKEN
+fi
 case "$AGENT" in
     claude)   COMMAND=(claude -p "$PROMPT") ;;
     codex)    COMMAND=(codex exec --skip-git-repo-check -s read-only --color never -o "$LAST" "$PROMPT") ;;

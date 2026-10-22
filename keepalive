@@ -13,9 +13,9 @@
 #   keepalive uninstall
 #   keepalive migrate         run by an update with the new code, so what the install keeps is up to date
 set -uo pipefail
-SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
-# shellcheck source=lib.sh
-source "$SCRIPT_DIR/lib.sh"
+KEEPALIVE_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+# shellcheck source=lib/load.sh
+source "$KEEPALIVE_DIR/lib/load.sh"
 load_config
 migrate_token
 
@@ -107,7 +107,7 @@ _last_run() {  # prints "result|when|what", result being ok, limit, weekly, erro
 }
 
 # Who an agent is connected as: the email and plan when the agent keeps them, otherwise its provider.
-# Claude's year token carries no account details, so for it this reads what login.sh wrote down.
+# Claude's year token carries no account details, so for it this reads what scripts/login.sh wrote down.
 _account() {
     if [[ "$1" == "claude" && -s "$CLAUDE_TOKEN" ]]; then
         cat "$CLAUDE_ACCOUNT" 2>/dev/null || echo "$T_UNKNOWN"
@@ -318,7 +318,7 @@ login() {
         return 1
     fi
     if [[ "$agent" == claude ]]; then
-        bash "$SCRIPT_DIR/login.sh" || return 1
+        bash "$KEEPALIVE_DIR/scripts/login.sh" || return 1
     else
         ui_section "$(printf "$T_CONNECT_TITLE" "$(agent_title "$agent" | tr '[:lower:]' '[:upper:]')")"
         printf '\n  %s\n\n' "$T_CONNECT_STEPS"
@@ -346,7 +346,7 @@ _close_session() {
     case "$1" in
         claude)
             rm -f "$CLAUDE_TOKEN" "$CLAUDE_TOKEN.created" "$CLAUDE_ACCOUNT" \
-                "$SCRIPT_DIR/.claude-token" "$SCRIPT_DIR/.claude-token.created"
+                "$KEEPALIVE_DIR/.claude-token" "$KEEPALIVE_DIR/.claude-token.created"
             sed -i '/# >>> agent-keepalive token >>>/,/# <<< agent-keepalive token <<</d' "$HOME/.bashrc" 2>/dev/null
             sed -i '/# >>> claude-keepalive token >>>/,/# <<< claude-keepalive token <<</d' "$HOME/.bashrc" 2>/dev/null
             agent_installed claude && env -u CLAUDE_CODE_OAUTH_TOKEN timeout 60 claude auth logout </dev/null >/dev/null 2>&1
@@ -570,7 +570,7 @@ _changes_table() {  # after, up_to
 
 _version() {
     printf '%s (%s)' "$(installed_version || echo "$T_NO_NUMBER")" \
-        "$(git -C "$SCRIPT_DIR" log -1 --format=%h 2>/dev/null || echo "?")"
+        "$(git -C "$KEEPALIVE_DIR" log -1 --format=%h 2>/dev/null || echo "?")"
 }
 
 # Brings the clone to origin/main: a fast-forward when it can, and when main was rewritten with the same files
@@ -578,7 +578,7 @@ _version() {
 # first and set STASHED. Returns 2, with everything as it was, when the clone has commits of its own, and 1 with
 # git's answer in MOVE_ERROR when git fails.
 _move_to_main() {
-    local git=(git -C "$SCRIPT_DIR") tree trees
+    local git=(git -C "$KEEPALIVE_DIR") tree trees
     MOVE_ERROR=""
     "${git[@]}" config core.fileMode false
     if [[ -n "$("${git[@]}" status --porcelain --untracked-files=no)" ]]; then
@@ -608,15 +608,15 @@ update() {  # [--yes]
         [[ -n "$answer" ]] && printf '%s\n' "$answer" | tail -n 3 | sed 's/^/    /'
         return 1
     fi
-    if [[ "$(git -C "$SCRIPT_DIR" rev-parse 'HEAD^{tree}' 2>/dev/null)" \
-          == "$(git -C "$SCRIPT_DIR" rev-parse 'origin/main^{tree}' 2>/dev/null)" ]]; then
+    if [[ "$(git -C "$KEEPALIVE_DIR" rev-parse 'HEAD^{tree}' 2>/dev/null)" \
+          == "$(git -C "$KEEPALIVE_DIR" rev-parse 'origin/main^{tree}' 2>/dev/null)" ]]; then
         # The same files, perhaps under a rewritten history; the clone follows main again without touching them.
-        [[ -z "$(git -C "$SCRIPT_DIR" status --porcelain --untracked-files=no)" ]] && STASHED="" && _move_to_main
+        [[ -z "$(git -C "$KEEPALIVE_DIR" status --porcelain --untracked-files=no)" ]] && STASHED="" && _move_to_main
         write_crontab  # a hand edit of config.sh reaches the cron with an update, as it always has
         ui_ok "$(printf "$T_UP_TO_DATE" "$(_version)")"
         return 3
     fi
-    if [[ "$(git -C "$SCRIPT_DIR" rev-list --count HEAD..origin/main 2>/dev/null)" == 0 ]]; then
+    if [[ "$(git -C "$KEEPALIVE_DIR" rev-list --count HEAD..origin/main 2>/dev/null)" == 0 ]]; then
         write_crontab
         ui_ok "$(printf "$T_UP_TO_DATE" "$(_version)")"  # main has nothing this copy lacks
         return 3
@@ -628,7 +628,7 @@ update() {  # [--yes]
         else
             printf '\n  %s\n\n' "$(printf "$T_NEW_VERSION_BARE" "$latest")"
         fi
-        git -C "$SCRIPT_DIR" show origin/main:CHANGELOG.md 2>/dev/null | _changes_table "$current" "$latest"
+        git -C "$KEEPALIVE_DIR" show origin/main:CHANGELOG.md 2>/dev/null | _changes_table "$current" "$latest"
         ui_note "$T_CL_NOTE"
     else
         printf '\n  %s\n' "$T_NEW_CHANGES"
@@ -644,9 +644,9 @@ update() {  # [--yes]
         2) ui_fail "$T_OWN_COMMITS"; return 1 ;;
         *) ui_fail "$T_UPDATE_FAILED"; printf '%s\n' "$MOVE_ERROR" | tail -n 3 | sed 's/^/    /'; return 1 ;;
     esac
-    chmod +x "$SCRIPT_DIR"/*.sh "$SCRIPT_DIR/keepalive"
+    chmod +x "$KEEPALIVE_DIR"/*.sh "$KEEPALIVE_DIR"/scripts/*.sh "$KEEPALIVE_DIR/keepalive" 2>/dev/null
     # The new code, not this one already in memory, brings what the install keeps up to date.
-    bash "$SCRIPT_DIR/keepalive" migrate
+    bash "$KEEPALIVE_DIR/keepalive" migrate
     after=$(_version)
     ui_ok "$(printf "$T_UPDATED" "$before" "$after")"
     [[ -n "$STASHED" ]] && ui_note "$T_STASHED"
@@ -664,7 +664,7 @@ changelog() {
     fi
     newer=$(newer_version) && ui_warn "$(printf "$T_CL_NEWER" "$newer")"
     echo ""
-    _changes_table "" "$current" < "$SCRIPT_DIR/CHANGELOG.md"
+    _changes_table "" "$current" < "$KEEPALIVE_DIR/CHANGELOG.md"
     ui_note "$T_CL_NOTE"
 }
 
@@ -722,7 +722,7 @@ _terminal() {
     ui_clear
     ui_section "$T_TERMINAL_TITLE"
     printf '\n  %s\n\n' "$T_TERMINAL_BACK"
-    KEEPALIVE_NOTICE="" bash --rcfile "$SCRIPT_DIR/terminal-rc.sh" -i
+    KEEPALIVE_NOTICE="" bash --rcfile "$KEEPALIVE_DIR/scripts/terminal-rc.sh" -i
 }
 
 _then_pause() {  # runs an action and waits before the menu comes back, unless the person went back from it
@@ -762,9 +762,9 @@ menu() {
         ui_choose "$U_PICK" 8 || return 0
         case "$ANSWER" in
             0) return 0 ;;
-            1) ui_clear; _then_pause bash "$SCRIPT_DIR/test.sh" --ask ;;
+            1) ui_clear; _then_pause bash "$KEEPALIVE_DIR/scripts/test.sh" --ask ;;
             2) ui_clear; _then_pause history ;;
-            3) bash "$SCRIPT_DIR/update-schedule.sh" ;;
+            3) bash "$KEEPALIVE_DIR/scripts/schedule.sh" ;;
             4) _then_pause login ;;
             5) _then_pause logout ;;
             6) ui_clear; _then_pause update_agents ;;
@@ -774,7 +774,7 @@ menu() {
                 if (( $? == 0 )); then
                     ui_note "$T_REOPEN"
                     ui_pause
-                    KEEPALIVE_NOTICE="" exec bash "$SCRIPT_DIR/keepalive" menu
+                    KEEPALIVE_NOTICE="" exec bash "$KEEPALIVE_DIR/keepalive" menu
                 fi
                 ui_pause ;;
             8) _terminal ;;
@@ -803,15 +803,15 @@ case "${1:-}" in
     status) status ;;
     login) login "${2:-}" ;;
     logout) shift; logout "$@"; code=$?; (( code == BACK )) && code=0; exit "$code" ;;
-    schedule) exec bash "$SCRIPT_DIR/update-schedule.sh" ;;
-    test) exec bash "$SCRIPT_DIR/test.sh" ;;
+    schedule) exec bash "$KEEPALIVE_DIR/scripts/schedule.sh" ;;
+    test) exec bash "$KEEPALIVE_DIR/scripts/test.sh" ;;
     log|history) history "${2:-}" ;;
     update) update "${2:-}"; (( $? == 1 )) && exit 1; exit 0 ;;
     changelog) changelog ;;
     migrate) migrate ;;
     update-agents) update_agents ;;
-    install) exec bash "$SCRIPT_DIR/install.sh" ;;
-    uninstall) exec bash "$SCRIPT_DIR/uninstall.sh" ;;
+    install) exec bash "$KEEPALIVE_DIR/install.sh" ;;
+    uninstall) exec bash "$KEEPALIVE_DIR/scripts/uninstall.sh" ;;
     -h|--help|help) _help ;;
     *) printf "$T_UNKNOWN_COMMAND\n" "$1"; exit 1 ;;
 esac

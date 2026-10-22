@@ -3,9 +3,9 @@
 # rewritten as soon as it is made. Run it as `keepalive schedule`.
 set -uo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=lib.sh
-source "$SCRIPT_DIR/lib.sh"
+KEEPALIVE_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+# shellcheck source=lib/load.sh
+source "$KEEPALIVE_DIR/lib/load.sh"
 
 if [[ ! -f "$CONFIG_FILE" ]]; then
     echo "No está config.sh. Corre primero install.sh."
