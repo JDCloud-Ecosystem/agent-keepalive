@@ -35,7 +35,8 @@ separate stage bolted on at the end.
 - Writing or editing anything under `docs/`, meaning guides, READMEs, ADRs and onboarding material.
 - Writing a spec in `docs/specs/`, or adding a section to one.
 - Writing a commit guide note, an issue, a pull request body, or a comment a person will read.
-- Writing or editing what keepalive shows on screen, the `U_` strings of `lib.sh` and the texts of each script.
+- Writing or editing what keepalive shows on screen, the `U_` strings of `lib/screens.sh` and the texts of each
+  script.
 - Editing prose that already exists. Touch a paragraph, humanize that paragraph. Boy Scout rule, not a sweep of the whole file.
 - The developer says a text sounds like AI, or asks for something that reads more human.
 
