@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.2](https://github.com/JDCloud-Ecosystem/agent-keepalive/compare/v1.1.1...v1.1.2) (2026-10-22)
+
+
+### Documentation
+
+* **adr:** accept the five decisions the repository already follows ([#26](https://github.com/JDCloud-Ecosystem/agent-keepalive/issues/26)) ([7bf494f](https://github.com/JDCloud-Ecosystem/agent-keepalive/commit/7bf494ff57f243699fdac7f8756ee31adac44030))
+
 ## [1.1.1](https://github.com/JDCloud-Ecosystem/agent-keepalive/compare/v1.1.0...v1.1.1) (2026-10-22)
 
 
