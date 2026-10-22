@@ -1,0 +1,130 @@
+name: "Bug Report"
+description: "Reportar un error o un comportamiento inesperado de agent-keepalive"
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Reporte de bug
+        Describe el problema con detalle suficiente para reproducirlo siempre. Nunca pegues un token, el
+        contenido de `~/.config/agent-keepalive/claude-token` ni el código de una pantalla de inicio de sesión.
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severidad
+      options:
+        - "P0, crítico (deja de enviar a todos, o muestra un token o un código)"
+        - "P1, alto (una parte no funciona y hay una forma de rodearlo)"
+        - "P2, medio (un problema visual o de uso)"
+        - "P3, bajo (una mejora menor)"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Parte afectada
+      options:
+        - "Menú y pantallas"
+        - "Sesiones automáticas (cron)"
+        - "Cuentas e inicio de sesión"
+        - "Instalación y actualización"
+        - "Release y CI"
+        - "Otro"
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Pasos para reproducir
+      placeholder: |
+        1. Correr keepalive...
+        2. Elegir la opción...
+        3. Esperar al envío de las...
+        4. Ver que...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Comportamiento esperado
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Comportamiento actual
+    validations:
+      required: true
+
+  - type: textarea
+    id: screen
+    attributes:
+      label: Lo que mostró la terminal
+      description: "La pantalla copiada como texto, desde el título hasta el error"
+      render: text
+
+  - type: input
+    id: versions
+    attributes:
+      label: Versión de agent-keepalive y del sistema
+      placeholder: "agent-keepalive 1.0.1 (está en version.txt, en la carpeta de la instalación), Ubuntu 24.04"
+
+  - type: input
+    id: agents
+    attributes:
+      label: Agentes y sus versiones
+      placeholder: "Claude Code 2.1.0, Codex 0.50.0"
+
+  - type: textarea
+    id: log
+    attributes:
+      label: Log del agente
+      description: "Lo que muestra `keepalive log`, sin tokens ni códigos"
+      render: shell
+
+  - type: checkboxes
+    id: conditions
+    attributes:
+      label: Condiciones de reproducción
+      options:
+        - label: "Pasa desde el cron, sin terminal"
+        - label: "Pasa al correr el comando a mano"
+        - label: "Empezó después de actualizar agent-keepalive"
+        - label: "Es intermitente (no siempre pasa)"
+
+  - type: textarea
+    id: edge-cases
+    attributes:
+      label: Peores escenarios
+      description: |
+        Lo peor que provoca este bug, y qué más podría estar roto por la misma causa. Sirve para
+        priorizar y para decidir si el arreglo merece una prueba permanente.
+      placeholder: |
+        - Lo peor que puede pasar, la ventana no se abre y nadie se entera
+        - Otros puntos que podrían fallar igual, la misma función la usa el historial
+        - Se reproduce con otro agente, otra hora u otra versión de Ubuntu o Debian
+    validations:
+      required: true
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Contexto adicional
+      description: "Frecuencia, condiciones especiales, relación con otros bugs"
+
+  - type: markdown
+    attributes:
+      value: |
+        ---
+        ## Rama y PR
+
+        - **Rama** `fix/{N}-{english-slug}`, desde `main`, y el PR apunta a `main`.
+        - **Título del PR** `fix(<scope>): <descripción en inglés>`
+
+        La convención completa (tipos de rama, flujo y labels) está en https://github.com/JDCloud-Ecosystem/agent-keepalive/blob/main/docs/GITHUB-WORKFLOW.md
