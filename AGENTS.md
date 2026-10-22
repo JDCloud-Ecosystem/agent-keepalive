@@ -55,21 +55,34 @@ clear requests or on work an `approved` spec already fixes.
 
 ## Key Paths
 
-| File                 | What it is                                                          |
-| -------------------- | ------------------------------------------------------------------- |
-| `keepalive`          | The command and its menu; `install.sh` links it into `~/.local/bin` |
-| `lib.sh`             | What the scripts share: agents, accounts, the cron and the screens  |
-| `session-starter.sh` | What the cron runs, one send per agent                              |
-| `login.sh`           | Connects Claude for a year                                          |
-| `install.sh`         | Installs what is missing and registers the cron                     |
-| `update-schedule.sh` | The schedule and agents screen                                      |
-| `terminal-rc.sh`     | Startup file of the menu's terminal, where `menu` goes back         |
-| `test.sh`            | The live test, `keepalive test`, on a real machine                  |
-| `uninstall.sh`       | Removes everything                                                  |
-| `version.txt`        | The version; Release Please writes it                               |
-| `tests/`             | The terminal scenarios and the lint, run in a clean Ubuntu container |
-| `docs/specs/`        | One spec per feature, from `docs/specs/features/_TEMPLATE.md`       |
-| `docs/adr/`          | The decisions that outlive their feature                            |
+The root keeps only the three files called by a fixed path from outside: the command (linked into
+`~/.local/bin`), the installer (in the README) and what the cron runs (in every install's crontab). Moving one of
+them breaks every install from before, so they stay.
+
+| File                     | What it is                                                                    |
+| ------------------------ | ----------------------------------------------------------------------------- |
+| `keepalive`              | The command, its menu, the status and the update                              |
+| `install.sh`             | Installs what is missing and registers the cron                               |
+| `session-starter.sh`     | What the cron runs, one send per agent                                        |
+| `lib/load.sh`            | What every script sources: the paths, then each file of `lib/`                |
+| `lib/agents.sh`          | Each agent's name, package, log and login checks                              |
+| `lib/settings.sh`        | `config.sh`, the crontab built from it, and the move of an old install's data |
+| `lib/screens.sh`         | The `ui_` functions and the `U_` words every screen uses                      |
+| `lib/schedule.sh`        | The schedule in words and the next send                                       |
+| `lib/claude-token.sh`    | Reading Claude's year token from its login screen                             |
+| `lib/updates.sh`         | The versions and the daily check                                              |
+| `scripts/login.sh`       | Connects Claude for a year, `keepalive login claude`                          |
+| `scripts/schedule.sh`    | The schedule and agents screen, `keepalive schedule`                          |
+| `scripts/test.sh`        | The live test, `keepalive test`, on a real machine                            |
+| `scripts/uninstall.sh`   | Removes everything, `keepalive uninstall`                                     |
+| `scripts/terminal-rc.sh` | Startup file of the menu's terminal, where `menu` goes back                   |
+| `version.txt`            | The version; Release Please writes it                                         |
+| `tests/`                 | The terminal scenarios and the lint, run in a clean Ubuntu container          |
+| `docs/specs/`            | One spec per feature, from `docs/specs/features/_TEMPLATE.md`                 |
+| `docs/adr/`              | The decisions that outlive their feature                                      |
+
+Every script sets `KEEPALIVE_DIR` to the root of the install and sources `lib/load.sh`. The person's data never
+lives in the code ([ADR 0004](docs/adr/0004-the-persons-data-lives-in-config.md)).
 
 ---
 
@@ -209,10 +222,10 @@ paths, never `-A` or `.`. It never changes the version or tags.
 - **KISS and YAGNI.** The simplest bash that works; nothing for a hypothetical future.
 - **Root cause first.** A symptom fix is a failure.
 - **Match the scripts.** `set -uo pipefail` in the scripts a person runs, section headers as `# ── Name ──…`,
-  functions in `lib.sh` when two scripts need them.
-- **One look for every screen.** The `ui_` functions of `lib.sh` draw them all. The title goes in capitals between
-  two rules, options are numbered under small headings and lists are tables (`ui_table`). An option nothing else
-  starts with is taken with one key, with no Enter (`ui_choose`), and `0` goes back from every screen. Tags are
+  functions in the `lib/` file of their topic when two scripts need them.
+- **One look for every screen.** The `ui_` functions of `lib/screens.sh` draw them all. The title goes in capitals
+  between two rules, options are numbered under small headings and lists are tables (`ui_table`). An option nothing
+  else starts with is taken with one key, with no Enter (`ui_choose`), and `0` goes back from every screen. Tags are
   coloured text, never a background. No whiptail.
 - **Plain Spanish on screen.** No colon or semicolon inside a sentence, no em dash, no ellipsis; a comma, a
   period or parentheses take their place.
@@ -264,14 +277,20 @@ are not obvious from the code.
   numbering), the cron runs `session-starter.sh <session> <agent>` once per agent in `AGENTS`. It sends a short
   prompt with no terminal and logs one entry that ends in `OK`, `LIMIT` or an `ERROR` naming the command that
   fixes it. A limit is not a failure, since an open window is what the send is for.
-- **Where things live:** the code and `config.sh` in the clone, usually `~/projects/agent-keepalive`; the logs next
-  to them (`sessions.log` for Claude and `codex-sessions.log` for Codex keep their historical names, the rest are
-  `<agent>-sessions.log`); the Claude token, its date and its account in `~/.config/agent-keepalive/`, mode 700.
+- **Where things live:** the code in the clone, usually `~/projects/agent-keepalive`; everything of the person's
+  in `~/.config/agent-keepalive/`, mode 700: `config.sh`, `logs/<agent>.log`, and the Claude token with its date and
+  its account. Two installs of the same user share them.
+- **The move of an old install's data:** installs from before kept `config.sh` and the logs next to the code
+  (`sessions.log` for Claude, `codex-sessions.log` for Codex, `<agent>-sessions.log` for the rest).
+  `load_config` calls `migrate_data`, which moves them under a `flock` the first time any script of this version
+  runs. A `config.sh` already in `~/.config` wins over an old one, and a log in both places keeps every line.
+  Programs that read these files, such as a gateway's status probe, read the new place first and the old one
+  second.
 - **The crontab:** `write_crontab` rewrites only its own lines, each under a `# Agent session - <agent>
   <session>` comment, keeps every other line of the person's crontab, and adds a `PATH=` line when there is none.
   It runs on every schedule change and every update.
-- **Claude's login:** `login.sh` runs `claude setup-token`, which prints a token that lasts a year through a UI
-  that breaks it into lines as wide as the terminal. `token_from_screen` puts it back together; the token goes to
+- **Claude's login:** `scripts/login.sh` runs `claude setup-token`, which prints a token that lasts a year through a
+  UI that breaks it into lines as wide as the terminal. `token_from_screen` puts it back together; the token goes to
   `claude-token` and is exported as `CLAUDE_CODE_OAUTH_TOKEN` for each send. Codex and OpenCode use their own
   logins, read from their own auth files.
 - **The menu:** `keepalive` with no arguments, only in a terminal; without one it prints `status`. Three
@@ -292,4 +311,6 @@ are not obvious from the code.
   not rewritten; the README gives it the two commands for when it was.
 - **Tests:** `tests/run.sh` builds a clean Ubuntu image, puts stand-in `claude`, `codex`, `opencode` and `npm` in
   `/usr/local/bin`, installs the working tree for a user `tester` from a local bare repository, and
-  `tests/drive.py` drives every screen through a real pseudo-terminal.
+  `tests/drive.py` drives every screen through a real pseudo-terminal. When the checkout has the `v1.0.1` tag,
+  one scenario installs that version and updates it to the working tree with its own `keepalive update`; CI
+  checks out the whole history for it.

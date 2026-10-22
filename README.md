@@ -21,7 +21,8 @@ bash ~/projects/agent-keepalive/install.sh
 ```
 
 El instalador instala lo que falte (git, cron, Node.js, Claude Code y Codex), crea
-`config.sh` con el horario por defecto, registra el cron y deja disponible el comando `keepalive`.
+`~/.config/agent-keepalive/config.sh` con el horario por defecto, registra el cron y deja disponible el comando
+`keepalive`.
 El horario por defecto es a las 07:00 y 12:00, de lunes a viernes, solo con Claude.
 
 Después conecta tus agentes, como se explica abajo.
@@ -166,8 +167,8 @@ sigue cargado el token hasta que escribas `unset CLAUDE_CODE_OAUTH_TOKEN`; las n
 
 ## El historial
 
-Cada envío deja una línea en el log de su agente (`sessions.log` para Claude, `codex-sessions.log` para
-Codex y `<agente>-sessions.log` para los demás). Termina siempre en uno de tres resultados:
+Cada envío deja una línea en el log de su agente, en `~/.config/agent-keepalive/logs/`, como `claude.log` o
+`codex.log`. Termina siempre en uno de tres resultados:
 
 | Resultado | Significa                                                                   |
 | --------- | --------------------------------------------------------------------------- |
@@ -181,7 +182,8 @@ Los logs se recortan solos al llegar a 200 líneas.
 
 ## Configuración
 
-`config.sh` se crea al instalar y `keepalive schedule` lo mantiene. También se puede editar a mano:
+`~/.config/agent-keepalive/config.sh` se crea al instalar y `keepalive schedule` lo mantiene. También se puede
+editar a mano:
 
 ```bash
 MORNING_HOUR=7           # 0 a 23
@@ -204,21 +206,34 @@ Después de editarlo a mano, `keepalive update` vuelve a escribir el cron.
 
 ## Archivos
 
-| Archivo              | Qué es                                                                       |
-| -------------------- | ---------------------------------------------------------------------------- |
-| `keepalive`          | El comando; `install.sh` lo enlaza en `~/.local/bin`                         |
-| `lib.sh`             | Lo que comparten los scripts: agentes, cron y cada pantalla                  |
-| `session-starter.sh` | Lo que corre el cron, un envío por agente                                    |
-| `login.sh`           | Conecta Claude por un año                                                    |
-| `install.sh`         | Instala y registra el cron                                                   |
-| `update-schedule.sh` | La pantalla de horario y agentes                                             |
-| `terminal-rc.sh`     | El arranque de la terminal del menú, con `menu` para volver                  |
-| `test.sh`            | La prueba completa                                                           |
-| `tests/`             | Las pruebas de la terminal en un Ubuntu limpio, y la revisión de los scripts |
-| `uninstall.sh`       | Lo quita todo                                                                |
-| `config.sh`, `*.log` | Se generan al usarlo y git los ignora                                        |
-| `version.txt`        | La versión instalada; la escribe Release Please                              |
-| `package.json`       | Revisa los commits de quien contribuye; los scripts no usan Node             |
+En la raíz quedan los tres archivos que se llaman con una ruta fija desde fuera, el comando, el instalador y lo
+que corre el cron. El resto del código está en `lib/` y `scripts/`.
+
+| Archivo                  | Qué es                                                                       |
+| ------------------------ | ---------------------------------------------------------------------------- |
+| `keepalive`              | El comando y su menú; `install.sh` lo enlaza en `~/.local/bin`               |
+| `install.sh`             | Instala lo que falta y registra el cron                                      |
+| `session-starter.sh`     | Lo que corre el cron, un envío por agente                                    |
+| `lib/`                   | Lo que comparten los scripts, un archivo por tema                            |
+| `scripts/login.sh`       | Conecta Claude por un año, `keepalive login claude`                          |
+| `scripts/schedule.sh`    | La pantalla de horario y agentes, `keepalive schedule`                       |
+| `scripts/test.sh`        | La prueba completa con los agentes de verdad, `keepalive test`               |
+| `scripts/uninstall.sh`   | Lo quita todo, `keepalive uninstall`                                         |
+| `scripts/terminal-rc.sh` | El arranque de la terminal del menú, con `menu` para volver                  |
+| `tests/`                 | Las pruebas de la terminal en un Ubuntu limpio, y la revisión de los scripts |
+| `version.txt`            | La versión instalada; la escribe Release Please                              |
+| `package.json`           | Revisa los commits de quien contribuye; los scripts no usan Node             |
+
+Lo tuyo vive fuera del código, en `~/.config/agent-keepalive/`, legible solo por ti.
+
+| Archivo        | Qué es                                                 |
+| -------------- | ------------------------------------------------------ |
+| `config.sh`    | El horario y los agentes                               |
+| `logs/`        | El historial de envíos, un archivo por agente          |
+| `claude-token` | El token de un año de Claude, con su fecha y su cuenta |
+
+Una instalación de antes guardaba `config.sh` y los logs junto al código. La primera vez que corre esta versión
+los mueve solos, sin cambiar nada de lo que dicen.
 
 ---
 
@@ -237,8 +252,8 @@ Después de editarlo a mano, `keepalive update` vuelve a escribir el cron.
   git -C ~/projects/agent-keepalive fetch origin
   git -C ~/projects/agent-keepalive reset --hard origin/main
   ```
-- **Los scripts muestran `^M`.** Se clonaron antes de que existiera `.gitattributes`; `sed -i 's/\r//' *.sh`
-  lo corrige.
+- **Los scripts muestran `^M`.** Se clonaron antes de que existiera `.gitattributes`;
+  `sed -i 's/\r//' keepalive *.sh lib/*.sh scripts/*.sh` lo corrige.
 
 Cada usuario del servidor tiene su propia instalación y sus propias sesiones. No hay demonios ni
 procesos en segundo plano, solo cron y bash. Probado en Ubuntu Server 22.04 y 24.04.

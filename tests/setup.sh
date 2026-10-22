@@ -76,22 +76,28 @@ git -C /srv/work init -q -b main && git -C /srv/work add -A
 git -C /srv/work -c core.hooksPath=/dev/null commit -q -m "test: code under test"
 git clone -q --bare /srv/work /srv/ka.git
 chown -R tester:tester /srv/ka.git
+# The published 1.0.1, when the repository under test has its tag, for the scenario that updates from it.
+rm -rf /srv/v101
+if git -C /src rev-parse -q --verify 'v1.0.1^{commit}' >/dev/null 2>&1; then
+  mkdir -p /srv/v101 && git -C /src archive v1.0.1 | tar -x -C /srv/v101 && chown -R tester:tester /srv/v101
+fi
 su - tester -c '
   git config --global user.email t@t; git config --global user.name t; git config --global --add safe.directory "*"
   d="$HOME/projects/agent-keepalive"
   rm -rf "$HOME/projects" "$HOME/.config/agent-keepalive" "$HOME/.codex" "$HOME/.local/share/opencode" "$HOME/.claude"
   git clone -q /srv/ka.git "$d"
   git -C "$d" config core.fileMode false
+  s="$HOME/.config/agent-keepalive"
+  mkdir -p "$s/logs" && chmod 700 "$s"
   printf "%s\n" "#!/bin/bash" "LANGUAGE=\"es\"" "MORNING_HOUR=7" "MORNING_MINUTE=0" "MORNING_ENABLED=true" \
     "AFTERNOON_HOUR=12" "AFTERNOON_MINUTE=0" "AFTERNOON_ENABLED=true" "NIGHT_HOUR=17" "NIGHT_MINUTE=0" \
-    "NIGHT_ENABLED=false" "AGENTS=\"claude\"" "WEEKDAYS=\"1,2,3,4,5\"" "MAX_LOG_LINES=200" > "$d/config.sh"
+    "NIGHT_ENABLED=false" "AGENTS=\"claude\"" "WEEKDAYS=\"1,2,3,4,5\"" "MAX_LOG_LINES=200" > "$s/config.sh"
   mkdir -p "$HOME/.local/bin" && ln -sf "$d/keepalive" "$HOME/.local/bin/keepalive"
-  bash -c "SCRIPT_DIR=$d; . $d/lib.sh; write_crontab"
-  mkdir -p "$HOME/.config/agent-keepalive" && chmod 700 "$HOME/.config/agent-keepalive"
+  bash -c "KEEPALIVE_DIR=$d; . $d/lib/load.sh; write_crontab"
   echo -n sk-ant-oat01-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx > "$HOME/.config/agent-keepalive/claude-token"
   date -d "-20 days" +%F > "$HOME/.config/agent-keepalive/claude-token.created"
   echo persona@example.com > "$HOME/.config/agent-keepalive/claude-account"
-  printf "[%s] [MORNING] OK: OK\n---\n" "$(date -d "-1 day" "+%Y-%m-%d 07:00:01")" > "$d/sessions.log"
+  printf "[%s] [MORNING] OK: OK\n---\n" "$(date -d "-1 day" "+%Y-%m-%d 07:00:01")" > "$s/logs/claude.log"
 '
 echo "setup done: $(su - tester -c 'crontab -l | grep -c session-starter') cron lines"
 # No systemd in the container: cron counts as active, as on a real server.

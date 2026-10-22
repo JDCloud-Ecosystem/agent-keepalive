@@ -7,9 +7,9 @@
 # year and never renews, so nothing can break it. This script runs it, keeps only the token (readable by you
 # alone, in ~/.config/agent-keepalive), checks it works, and makes every new terminal use it.
 set -uo pipefail
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=lib.sh
-source "$SCRIPT_DIR/lib.sh"
+KEEPALIVE_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+# shellcheck source=lib/load.sh
+source "$KEEPALIVE_DIR/lib/load.sh"
 load_config
 
 T_TITLE="CONECTAR CLAUDE POR UN AÑO"

@@ -35,7 +35,7 @@ The project has a suite of terminal scenarios in `tests/`. Where a real test fit
 test. Where it does not, "verification" is one of:
 
 - `bash tests/lint.sh` catching a syntax error or a shellcheck error
-- A function of `lib.sh` called from `bash -c` with fixed input, and its output compared
+- A function of `lib/` called from `bash -c` with fixed input, and its output compared
 - `keepalive test` on a machine the developer chose, for what only a real agent answers
 
 The discipline does not change with the medium. Define the failing proof, then implement.

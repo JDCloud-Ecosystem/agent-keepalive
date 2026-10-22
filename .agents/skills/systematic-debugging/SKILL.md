@@ -117,7 +117,7 @@ See `AGENTS.md` → "Non-Negotiable Rules".
 
 - `bash tests/lint.sh`: a script that does not parse, a quote missing, a variable used before it is set
 - `bash tests/run.sh`: a screen, a key, a command, the crontab or a file that came out wrong
-- The agent's log (`sessions.log`, `codex-sessions.log`, `<agent>-sessions.log`): every send ends in `OK`,
+- The agent's log (`~/.config/agent-keepalive/logs/<agent>.log`): every send ends in `OK`,
   `LIMIT` or an `ERROR` that names the command to run
 - `crontab -l`: the lines `keepalive` writes, one per session and agent
 - `keepalive test`, on a machine the developer chose: what a real agent answers

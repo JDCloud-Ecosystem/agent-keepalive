@@ -45,7 +45,7 @@ sin una línea más en el crontab.
 
 ### Confirmación
 
-`check_update` en `lib.sh` es la única que busca, y `tests/drive.py` (`t_update_scenarios`) prueba que sin red
+`check_update` en `lib/updates.sh` es la única que busca, y `tests/drive.py` (`t_update_scenarios`) prueba que sin red
 la actualización lo dice, que con un remoto que no responde ni el menú ni un envío esperan, y que una revisión
 reciente no se repite.
 

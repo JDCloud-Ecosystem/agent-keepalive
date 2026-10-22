@@ -1,9 +1,9 @@
 #!/bin/bash
 set -uo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=lib.sh
-source "$SCRIPT_DIR/lib.sh"
+KEEPALIVE_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+# shellcheck source=lib/load.sh
+source "$KEEPALIVE_DIR/lib/load.sh"
 
 # ── OS / apt check ────────────────────────────────────────────────────────────
 if [[ "$(uname -s)" != "Linux" ]]; then
@@ -122,6 +122,7 @@ fi
 # ── config.sh ─────────────────────────────────────────────────────────────────
 step "$S_CONFIG"
 
+mkdir -p "$LOG_DIR" && chmod 700 "$STATE_DIR"
 if [[ ! -f "$CONFIG_FILE" ]]; then
     cat > "$CONFIG_FILE" << EOF
 #!/bin/bash
@@ -158,20 +159,17 @@ if ! grep -q '^AGENTS=' "$CONFIG_FILE"; then
     sed -i '/^CODEX_ENABLED=/d' "$CONFIG_FILE"
 fi
 
+# shellcheck source=/dev/null
 source "$CONFIG_FILE"
 
 # ── Permissions ───────────────────────────────────────────────────────────────
-chmod +x "$SESSION_FILE"                          2>/dev/null || true
-chmod +x "$SCRIPT_DIR/update-schedule.sh"         2>/dev/null || true
-chmod +x "$SCRIPT_DIR/test.sh"                    2>/dev/null || true
-chmod +x "$SCRIPT_DIR/uninstall.sh"               2>/dev/null || true
-chmod +x "$SCRIPT_DIR/login.sh" "$SCRIPT_DIR/keepalive" 2>/dev/null || true
+chmod +x "$KEEPALIVE_DIR"/*.sh "$KEEPALIVE_DIR"/scripts/*.sh "$KEEPALIVE_DIR/keepalive" 2>/dev/null || true
 # One command for everything: keepalive
-mkdir -p "$HOME/.local/bin" && ln -sf "$SCRIPT_DIR/keepalive" "$HOME/.local/bin/keepalive"
+mkdir -p "$HOME/.local/bin" && ln -sf "$KEEPALIVE_DIR/keepalive" "$HOME/.local/bin/keepalive"
 migrate_token
 
 # Ignore fileMode changes so git pull works cleanly after chmod
-git -C "$SCRIPT_DIR" config core.fileMode false 2>/dev/null || true
+git -C "$KEEPALIVE_DIR" config core.fileMode false 2>/dev/null || true
 
 # ── Crontab ───────────────────────────────────────────────────────────────────
 step "$S_CRON"
