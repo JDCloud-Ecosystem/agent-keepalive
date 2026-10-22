@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.1.1](https://github.com/JDCloud-Ecosystem/agent-keepalive/compare/v1.1.0...v1.1.1) (2026-10-22)
+
+
+### Bug Fixes
+
+* **menu:** put the colons back where Spanish expects them on every screen ([#24](https://github.com/JDCloud-Ecosystem/agent-keepalive/issues/24)) ([32e3e77](https://github.com/JDCloud-Ecosystem/agent-keepalive/commit/32e3e77a8bf7f1f20452ae7e37eddc97a85e7da5))
+
+
+### Tests
+
+* **update:** read the installed version in the update scenarios instead of assuming 1.0.1 ([#21](https://github.com/JDCloud-Ecosystem/agent-keepalive/issues/21)) ([ccd6ff7](https://github.com/JDCloud-Ecosystem/agent-keepalive/commit/ccd6ff73ef4e5618632826f9780a1f0e2f1c9b34))
+
 ## [1.1.0](https://github.com/JDCloud-Ecosystem/agent-keepalive/compare/v1.0.1...v1.1.0) (2026-10-22)
 
 
