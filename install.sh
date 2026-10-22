@@ -7,63 +7,21 @@ source "$SCRIPT_DIR/lib.sh"
 
 # ── OS / apt check ────────────────────────────────────────────────────────────
 if [[ "$(uname -s)" != "Linux" ]]; then
-    echo "ERROR: This script must run on Linux (Ubuntu Server)."
-    echo "       Copy this repository to your server and run it there."
+    echo "Este instalador corre en Linux, en Ubuntu o Debian. Copia el repositorio a tu servidor y córrelo ahí."
     exit 1
 fi
 
 if ! command -v apt-get >/dev/null 2>&1; then
-    echo "ERROR: apt-get not found. Only Ubuntu/Debian is supported."
+    echo "No está apt-get. Solo funciona en Ubuntu o Debian."
     exit 1
 fi
 
 # ── Sudo check ────────────────────────────────────────────────────────────────
 if [[ $EUID -ne 0 ]]; then
-    echo "This installer needs sudo to install packages. You may be prompted for your password."
-    sudo -v || { echo "ERROR: sudo access required."; exit 1; }
+    echo "El instalador necesita sudo para instalar paquetes, y te puede pedir tu contraseña."
+    sudo -v || { echo "Sin sudo no se puede instalar."; exit 1; }
 fi
 
-# ── Colors & language ─────────────────────────────────────────────────────────
-_set_colors() {
-    export NEWT_COLORS='
-root=,black
-border=yellow,black
-window=yellow,black
-shadow=black,black
-title=yellow,black
-button=black,yellow
-actbutton=white,yellow
-checkbox=yellow,black
-actcheckbox=black,yellow
-entry=yellow,black
-label=yellow,black
-listbox=yellow,black
-actlistbox=black,yellow
-textbox=yellow,black
-acttextbox=black,yellow
-helpline=,black
-roottext=yellow,black
-emptyscale=black,black
-disabledentry=gray,black
-'
-}
-
-_pick_lang() {
-    _set_colors
-    if command -v whiptail >/dev/null 2>&1; then
-        whiptail --title "Language" \
-            --menu "Choose language / Elige idioma:" 10 45 2 \
-            "en" "English" \
-            "es" "Español" \
-            3>&1 1>&2 2>&3 || echo "en"
-    else
-        printf "\nChoose language / Elige idioma:\n  1) English\n  2) Español\n"
-        read -rp "Choice [1/2, default=1]: " _c
-        [[ "${_c:-1}" == "2" ]] && echo "es" || echo "en"
-    fi
-}
-
-LANGUAGE=$(_pick_lang)
 clear
 
 # ── ASCII header (always in cyan, not translated) ─────────────────────────────
@@ -76,53 +34,32 @@ printf '\033[1;36m%s\033[0m\n' '░▀▀▀░▀░▀░▀▀▀░░▀░
 echo ""
 
 # ── String tables ─────────────────────────────────────────────────────────────
-if [[ "$LANGUAGE" == "es" ]]; then
-    S_DEPS="Verificando e instalando dependencias"
-    S_INSTALLING="Instalando"
-    S_INSTALLED="ya instalado"
-    S_NODE_INSTALL="Instalando Node.js LTS"
-    S_CLAUDE_INSTALL="Instalando Claude Code"
-    S_CLAUDE_FOUND="Claude Code encontrado"
-    S_CONFIG="Creando configuración"
-    S_CRON="Configurando crontab"
-    S_DONE="── Instalación completa ──"
-    S_LOGIN_WARN="Conecta tus agentes con:  keepalive login   (Claude queda conectado por un año)"
-    S_TEST_CMD="  Todo en un comando:  keepalive"
-    S_SCHED_CMD="  Horario y agentes:   keepalive schedule"
-    S_M_FMT="  Mañana:           %02d:%02d"
-    S_A_FMT="  Tarde:            %02d:%02d"
-    S_N_FMT="  Noche:            %02d:%02d"
-    S_N_OFF="  Noche:            desactivada"
-    S_D_FMT="  Días:             %s"
-    S_CODEX_INSTALL="Instalando Codex"
-    S_CODEX_FOUND="Codex encontrado"
-    S_WARN_CODEX="No se pudo instalar Codex — instálalo con: npm install -g @openai/codex"
-    S_ERR_NODE="ERROR: No se pudo instalar Node.js. Instálalo manualmente."
-    S_ERR_CLAUDE="ERROR: No se pudo instalar Claude Code."
-else
-    S_DEPS="Checking and installing dependencies"
-    S_INSTALLING="Installing"
-    S_INSTALLED="already installed"
-    S_NODE_INSTALL="Installing Node.js LTS"
-    S_CLAUDE_INSTALL="Installing Claude Code"
-    S_CLAUDE_FOUND="Claude Code found"
-    S_CONFIG="Creating configuration"
-    S_CRON="Setting up crontab"
-    S_DONE="── Installation complete ──"
-    S_LOGIN_WARN="Connect your agents with:  keepalive login   (Claude stays connected for a year)"
-    S_TEST_CMD="  Everything in one command:  keepalive"
-    S_SCHED_CMD="  Schedule and agents:        keepalive schedule"
-    S_M_FMT="  Morning:          %02d:%02d"
-    S_A_FMT="  Afternoon:        %02d:%02d"
-    S_N_FMT="  Night:            %02d:%02d"
-    S_N_OFF="  Night:            disabled"
-    S_D_FMT="  Days:             %s"
-    S_CODEX_INSTALL="Installing Codex"
-    S_CODEX_FOUND="Codex found"
-    S_WARN_CODEX="Could not install Codex — install manually: npm install -g @openai/codex"
-    S_ERR_NODE="ERROR: Could not install Node.js. Install it manually."
-    S_ERR_CLAUDE="ERROR: Could not install Claude Code."
-fi
+S_DEPS="Verificando e instalando dependencias"
+S_INSTALLING="Instalando"
+S_INSTALLED="ya instalado"
+S_NOT_INSTALLED="no se pudo instalar"
+S_NODE_INSTALL="Instalando Node.js LTS"
+S_CLAUDE_INSTALL="Instalando Claude Code"
+S_CLAUDE_FOUND="Claude Code ya instalado"
+S_CONFIG="Creando la configuración"
+S_CONFIG_NEW="config.sh creado"
+S_CONFIG_KEPT="config.sh ya existía y se quedó igual"
+S_CRON="Configurando el crontab"
+S_CRON_OK="crontab listo"
+S_DONE="INSTALACIÓN COMPLETA"
+S_LOGIN_WARN="Conecta tus agentes desde el menú, con keepalive. Claude queda conectado por un año."
+S_TEST_CMD="  Todo en un comando   keepalive"
+S_SCHED_CMD="  Horario y agentes    keepalive schedule"
+S_M_FMT="  Mañana    %02d:%02d"
+S_A_FMT="  Tarde     %02d:%02d"
+S_N_FMT="  Noche     %02d:%02d"
+S_N_OFF="  Noche     desactivada"
+S_D_FMT="  Días      %s"
+S_CODEX_INSTALL="Instalando Codex"
+S_CODEX_FOUND="Codex ya instalado"
+S_WARN_CODEX="No se pudo instalar Codex. Instálalo con sudo npm install -g @openai/codex"
+S_ERR_NODE="No se pudo instalar Node.js. Instálalo a mano."
+S_ERR_CLAUDE="No se pudo instalar Claude Code."
 
 step() { echo ""; echo "▶ $*"; }
 ok()   { echo "  ✓ $*"; }
@@ -135,18 +72,18 @@ sudo apt-get update -qq 2>/dev/null
 
 _pkg() {
     if dpkg -s "$1" >/dev/null 2>&1; then
-        ok "$1 — $S_INSTALLED"
+        ok "$1 $S_INSTALLED"
     else
         printf "  %s %s... " "$S_INSTALLING" "$1"
         if sudo apt-get install -y "$1" -qq >/dev/null 2>&1; then
             echo "✓"
         else
-            warn "could not install $1"
+            warn "$1 $S_NOT_INSTALLED"
         fi
     fi
 }
 
-for _p in git curl cron whiptail; do _pkg "$_p"; done
+for _p in git curl cron; do _pkg "$_p"; done
 
 sudo systemctl enable cron >/dev/null 2>&1 || true
 sudo systemctl start  cron >/dev/null 2>&1 || true
@@ -159,7 +96,7 @@ if ! command -v node >/dev/null 2>&1; then
         || die "$S_ERR_NODE"
     ok "node $(node --version)"
 else
-    ok "node $(node --version) — $S_INSTALLED"
+    ok "node $(node --version) $S_INSTALLED"
 fi
 
 # ── Claude Code ───────────────────────────────────────────────────────────────
@@ -169,7 +106,7 @@ if ! command -v claude >/dev/null 2>&1; then
         || die "$S_ERR_CLAUDE"
     ok "claude $(claude --version 2>/dev/null | head -1)"
 else
-    ok "$S_CLAUDE_FOUND: $(claude --version 2>/dev/null | head -1)"
+    ok "$S_CLAUDE_FOUND, $(claude --version 2>/dev/null | head -1)"
 fi
 
 # ── Codex ─────────────────────────────────────────────────────────────────────
@@ -179,7 +116,7 @@ if ! command -v codex >/dev/null 2>&1; then
         && ok "codex $(codex --version 2>/dev/null | head -1)" \
         || warn "$S_WARN_CODEX"
 else
-    ok "$S_CODEX_FOUND: $(codex --version 2>/dev/null | head -1)"
+    ok "$S_CODEX_FOUND, $(codex --version 2>/dev/null | head -1)"
 fi
 
 # ── config.sh ─────────────────────────────────────────────────────────────────
@@ -188,7 +125,6 @@ step "$S_CONFIG"
 if [[ ! -f "$CONFIG_FILE" ]]; then
     cat > "$CONFIG_FILE" << EOF
 #!/bin/bash
-LANGUAGE="$LANGUAGE"
 MORNING_HOUR=7
 MORNING_MINUTE=0
 MORNING_ENABLED=true
@@ -203,10 +139,9 @@ WEEKDAYS="1,2,3,4,5"
 MAX_LOG_LINES=200
 EOF
     chmod +x "$CONFIG_FILE"
-    ok "config.sh created"
+    ok "$S_CONFIG_NEW"
 else
-    sed -i "s/^LANGUAGE=.*/LANGUAGE=\"$LANGUAGE\"/" "$CONFIG_FILE"
-    ok "config.sh already exists (settings preserved)"
+    ok "$S_CONFIG_KEPT"
 fi
 
 # Add new variables if missing (migration for existing installs)
@@ -243,11 +178,11 @@ step "$S_CRON"
 
 write_crontab
 
-ok "crontab configured"
+ok "$S_CRON_OK"
 
 # ── Done ──────────────────────────────────────────────────────────────────────
 echo ""
-printf '\033[1;32m%s\033[0m\n' "$S_DONE"
+ui_section "$S_DONE"
 echo ""
 [[ "${MORNING_ENABLED:-true}"   == "true" ]] && printf "$S_M_FMT\n" "$MORNING_HOUR"         "$MORNING_MINUTE"
 [[ "${AFTERNOON_ENABLED:-true}" == "true" ]] && printf "$S_A_FMT\n" "$AFTERNOON_HOUR"        "$AFTERNOON_MINUTE"
@@ -261,5 +196,5 @@ echo ""
 echo "$S_TEST_CMD"
 echo "$S_SCHED_CMD"
 echo ""
-printf "  ⚠  %s\n" "$S_LOGIN_WARN"
+ui_warn "$S_LOGIN_WARN"
 echo ""

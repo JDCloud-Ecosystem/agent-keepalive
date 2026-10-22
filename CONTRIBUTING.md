@@ -17,7 +17,7 @@ para correr sus scripts.
 ## Un cambio, de la rama al PR
 
 1. Crear la rama desde `main`, como `fix/login-email` o `feature/night-session`, siempre en inglés.
-2. Hacer el cambio. Cada texto que ve una persona va en el bloque `es` y en el bloque `en` de su script.
+2. Hacer el cambio. Cada texto que ve una persona va en español, que es el único idioma de la herramienta.
 3. Revisar que los scripts pasen.
 
    ```bash

@@ -1,4 +1,6 @@
 #!/bin/bash
+# The schedule screen: the days, the three sessions and which agents get them. Each change is saved and the cron
+# rewritten as soon as it is made. Run it as `keepalive schedule`.
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -6,281 +8,211 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib.sh"
 
 if [[ ! -f "$CONFIG_FILE" ]]; then
-    echo "ERROR: config.sh not found / config.sh no encontrado. Run install.sh first."
+    echo "No está config.sh. Corre primero install.sh."
     exit 1
 fi
 
-if ! command -v whiptail >/dev/null 2>&1; then
-    echo "ERROR: whiptail not found. Run install.sh to install it."
-    exit 1
-fi
+T_TITLE="HORARIO Y AGENTES"
+T_L_DAYS="Días       "; T_L_MORNING="Mañana     "; T_L_AFTERNOON="Tarde      "; T_L_NIGHT="Noche      "
+T_L_AGENTS="Agentes    "; T_L_NEXT="Próximo    "
+T_OFF="desactivada"; T_NONE="ninguno, no hay días ni sesiones activas"
+T_CHANGE="CAMBIAR"
+T_M_DAYS="Los días"; T_M_MORNING="La sesión de la mañana"; T_M_AFTERNOON="La sesión de la tarde"
+T_M_NIGHT="La sesión de la noche"; T_M_AGENTS="Los agentes que participan"
+T_DAYS_TITLE="LOS DÍAS"
+T_DAYS_HOW="Escribe los números de los días y pulsa Enter, como 1-5 para lunes a viernes, 1 3 5 o 1-7 para todos."
+T_DAYS_ASK="Elige los días"; T_BAD_DAYS="Usa números del 1 al 7, sueltos o en rangos como 1-5."
+T_SESSION_TITLE="LA SESIÓN DE LA %s"; T_MORNING="MAÑANA"; T_AFTERNOON="TARDE"; T_NIGHT="NOCHE"
+T_SESSION_NOW="Ahora"; T_SESSION_HOW="Escribe la hora como 07:30 y pulsa Enter, o escribe no para desactivarla."
+T_SESSION_ASK="Escribe la hora"; T_BAD_TIME="Usa la hora como 07:30, de 00:00 a 23:59, o escribe no."
+T_LAST_SESSION="Es la única sesión activa. Deja otra activa antes de quitar esta."
+T_AGENTS_TITLE="LOS AGENTES QUE PARTICIPAN"
+T_AGENTS_HOW="Todos usan el mismo horario. Escribe los números de los que participan y pulsa Enter, como 1 o 1 2."
+T_AGENTS_ASK="Elige los agentes"; T_IN="participa"; T_OUT="no participa"; T_MISSING="no instalado"
+T_BAD_AGENTS="Usa los números de la lista, al menos uno."; T_NOT_INSTALLED="%s no está instalado."
+T_SAVED="Guardado, y el cron quedó al día."
 
-# ── Colors ────────────────────────────────────────────────────────────────────
-export NEWT_COLORS='
-root=,black
-border=yellow,black
-window=yellow,black
-shadow=black,black
-title=yellow,black
-button=black,yellow
-actbutton=white,yellow
-checkbox=yellow,black
-actcheckbox=black,yellow
-entry=yellow,black
-label=yellow,black
-listbox=yellow,black
-actlistbox=black,yellow
-textbox=yellow,black
-acttextbox=black,yellow
-helpline=,black
-roottext=yellow,black
-emptyscale=black,black
-disabledentry=gray,black
-'
+# The week as the person reads it, Monday first, against cron's numbers, where Sunday is 0.
+WEEK_CRON=(1 2 3 4 5 6 0)
+SESSIONS=(MORNING AFTERNOON NIGHT)
+PAUSE=2  # seconds a warning stays before the screen is drawn again
 
-# ── Language selection (always ask) ──────────────────────────────────────────
-source "$CONFIG_FILE"
-_DEFAULT_LANG="${LANGUAGE:-en}"
+_save() {  # key, value; the cron follows at once
+    set_config "$1" "$2"
+    sed -i '/^CODEX_ENABLED=/d' "$CONFIG_FILE"
+    write_crontab
+    FLASH="$T_SAVED"
+}
 
-LANGUAGE=$(whiptail --title "Language" \
-    --menu "Choose language / Elige idioma:" 10 45 2 \
-    "en" "English" \
-    "es" "Español" \
-    3>&1 1>&2 2>&3) || LANGUAGE="$_DEFAULT_LANG"
+_session_text() {  # MORNING, AFTERNOON or NIGHT
+    local enabled="${1}_ENABLED" hour="${1}_HOUR" minute="${1}_MINUTE"
+    if [[ "${!enabled}" == "true" ]]; then printf '%02d:%02d' "${!hour}" "${!minute}"; else echo "$T_OFF"; fi
+}
 
-# Re-source for schedule values (MORNING_HOUR, etc.) without overriding LANGUAGE
-_SAVED_LANG="$LANGUAGE"
-source "$CONFIG_FILE"
-LANGUAGE="$_SAVED_LANG"
+_agents_text() {
+    local names=() agent
+    for agent in $AGENTS; do names+=("$(agent_title "$agent")"); done
+    join_words "${names[@]}"
+}
 
-# Defaults for variables not present in older config.sh
-MORNING_ENABLED="${MORNING_ENABLED:-true}"
-AFTERNOON_ENABLED="${AFTERNOON_ENABLED:-true}"
-NIGHT_ENABLED="${NIGHT_ENABLED:-false}"
-NIGHT_HOUR="${NIGHT_HOUR:-17}"
-NIGHT_MINUTE="${NIGHT_MINUTE:-0}"
-# Older configs only knew CODEX_ENABLED; they keep meaning the same thing.
-if [[ -z "${AGENTS:-}" ]]; then AGENTS="claude"; [[ "${CODEX_ENABLED:-false}" == "true" ]] && AGENTS="claude codex"; fi
+_week_line() {  # 1 lunes  2 martes ... 7 domingo
+    local i line=""
+    for i in 0 1 2 3 4 5 6; do line+="${C_GREEN}$(( i + 1 ))${C_RESET} ${U_DAYS[${WEEK_CRON[i]}]}  "; done
+    printf '  %s\n' "$line"
+}
 
-# ── String tables ─────────────────────────────────────────────────────────────
-if [[ "$LANGUAGE" == "es" ]]; then
-    T_TITLE="Horario de tus agentes"
-    T_DAYS="Selecciona los días activos:"
-    T_SUN="Domingo"   T_MON="Lunes"    T_TUE="Martes"  T_WED="Miércoles"
-    T_THU="Jueves"    T_FRI="Viernes"  T_SAT="Sábado"
-    T_SESSIONS="Activa o desactiva las sesiones:"
-    T_MORNING_S="Sesión matutina"
-    T_AFTERNOON_S="Sesión vespertina"
-    T_NIGHT_S="Sesión nocturna (opcional)"
-    T_M_HOUR="Hora de la sesión matutina (0-23):"
-    T_M_MIN="Minuto de la sesión matutina (0-59):"
-    T_A_HOUR="Hora de la sesión vespertina (0-23):"
-    T_A_MIN="Minuto de la sesión vespertina (0-59):"
-    T_N_HOUR="Hora de la sesión nocturna (0-23):"
-    T_N_MIN="Minuto de la sesión nocturna (0-59):"
-    T_CONFIRM="¿Aplicar este horario?"
-    T_M_FMT="Mañana:    %02d:%02d"
-    T_A_FMT="Tarde:     %02d:%02d"
-    T_N_FMT="Noche:     %02d:%02d"
-    T_M_DIS="Mañana:    desactivada"
-    T_A_DIS="Tarde:     desactivada"
-    T_N_DIS="Noche:     desactivada"
-    T_D_FMT="Días:      %s"
-    T_DONE="── Horario aplicado ──"
-    T_CANCELLED="Cancelado."
-    T_BAD_HOUR="ERROR: La hora debe ser un número entre 0 y 23."
-    T_BAD_MIN="ERROR: El minuto debe ser un número entre 0 y 59."
-    T_AGENTS_Q="¿Qué agentes reciben la sesión automática? Todos usan el mismo horario."
-    T_AGENTS_FMT="Agentes:   %s"
-    T_MISSING="no instalado"
-    T_NO_AGENTS="ERROR: Elige al menos un agente."
-    T_NO_DAYS="ERROR: Selecciona al menos un día."
-    T_NO_SESSIONS="ERROR: Activa al menos una sesión."
-else
-    T_TITLE="Your agents' schedule"
-    T_DAYS="Select active days:"
-    T_SUN="Sunday"    T_MON="Monday"   T_TUE="Tuesday"  T_WED="Wednesday"
-    T_THU="Thursday"  T_FRI="Friday"   T_SAT="Saturday"
-    T_SESSIONS="Enable or disable sessions:"
-    T_MORNING_S="Morning session"
-    T_AFTERNOON_S="Afternoon session"
-    T_NIGHT_S="Night session (optional)"
-    T_M_HOUR="Morning session hour (0-23):"
-    T_M_MIN="Morning session minute (0-59):"
-    T_A_HOUR="Afternoon session hour (0-23):"
-    T_A_MIN="Afternoon session minute (0-59):"
-    T_N_HOUR="Night session hour (0-23):"
-    T_N_MIN="Night session minute (0-59):"
-    T_CONFIRM="Apply this schedule?"
-    T_M_FMT="Morning:   %02d:%02d"
-    T_A_FMT="Afternoon: %02d:%02d"
-    T_N_FMT="Night:     %02d:%02d"
-    T_M_DIS="Morning:   disabled"
-    T_A_DIS="Afternoon: disabled"
-    T_N_DIS="Night:     disabled"
-    T_D_FMT="Days:      %s"
-    T_DONE="── Schedule applied ──"
-    T_CANCELLED="Cancelled."
-    T_BAD_HOUR="ERROR: Hour must be a number between 0 and 23."
-    T_BAD_MIN="ERROR: Minute must be a number between 0 and 59."
-    T_AGENTS_Q="Which agents get the automatic session? They all share the schedule."
-    T_AGENTS_FMT="Agents:    %s"
-    T_MISSING="not installed"
-    T_NO_AGENTS="ERROR: Choose at least one agent."
-    T_NO_DAYS="ERROR: Select at least one day."
-    T_NO_SESSIONS="ERROR: Enable at least one session."
-fi
-
-# ── Helper: check if a day is in WEEKDAYS ─────────────────────────────────────
-_has_day() {
-    local d="$1"
-    local IFS=','
-    for _d in $WEEKDAYS; do
-        [[ "$_d" == "$d" ]] && return 0
+# 1-5, "1 3 5" or "1,3,5" as cron's list of days; fails on anything else.
+_parse_days() {
+    local text="${1//,/ }" word first last d picked=()
+    for word in $text; do
+        if [[ "$word" =~ ^([1-7])-([1-7])$ ]]; then
+            first=${BASH_REMATCH[1]} last=${BASH_REMATCH[2]}
+            (( first <= last )) || return 1
+            for (( d = first; d <= last; d++ )); do picked+=("${WEEK_CRON[d - 1]}"); done
+        elif [[ "$word" =~ ^[1-7]$ ]]; then
+            picked+=("${WEEK_CRON[word - 1]}")
+        else
+            return 1
+        fi
     done
-    return 1
-}
-_on()  { _has_day "$1" && echo "ON" || echo "OFF"; }
-_son() { [[ "${!1}" == "true" ]] && echo "ON" || echo "OFF"; }
-
-# ── Day checklist ─────────────────────────────────────────────────────────────
-DAYS_RAW=$(whiptail --title "$T_TITLE" --checklist \
-    "$T_DAYS" 18 42 7 \
-    "0" "$T_SUN" "$(_on 0)" \
-    "1" "$T_MON" "$(_on 1)" \
-    "2" "$T_TUE" "$(_on 2)" \
-    "3" "$T_WED" "$(_on 3)" \
-    "4" "$T_THU" "$(_on 4)" \
-    "5" "$T_FRI" "$(_on 5)" \
-    "6" "$T_SAT" "$(_on 6)" \
-    3>&1 1>&2 2>&3) || { echo "$T_CANCELLED"; exit 0; }
-
-NEW_WEEKDAYS=$(echo "$DAYS_RAW" | tr -d '"' | xargs | tr ' ' ',')
-
-if [[ -z "$NEW_WEEKDAYS" ]]; then
-    echo "$T_NO_DAYS"; exit 1
-fi
-
-# ── Session enable/disable checklist ─────────────────────────────────────────
-SESSIONS_RAW=$(whiptail --title "$T_TITLE" --checklist \
-    "$T_SESSIONS" 12 52 3 \
-    "morning"   "$T_MORNING_S"   "$(_son MORNING_ENABLED)" \
-    "afternoon" "$T_AFTERNOON_S" "$(_son AFTERNOON_ENABLED)" \
-    "night"     "$T_NIGHT_S"     "$(_son NIGHT_ENABLED)" \
-    3>&1 1>&2 2>&3) || { echo "$T_CANCELLED"; exit 0; }
-
-NEW_MORNING_ENABLED=false
-NEW_AFTERNOON_ENABLED=false
-NEW_NIGHT_ENABLED=false
-[[ "$SESSIONS_RAW" == *'"morning"'*   ]] && NEW_MORNING_ENABLED=true
-[[ "$SESSIONS_RAW" == *'"afternoon"'* ]] && NEW_AFTERNOON_ENABLED=true
-[[ "$SESSIONS_RAW" == *'"night"'*     ]] && NEW_NIGHT_ENABLED=true
-
-if [[ "$NEW_MORNING_ENABLED" == "false" && \
-      "$NEW_AFTERNOON_ENABLED" == "false" && \
-      "$NEW_NIGHT_ENABLED" == "false" ]]; then
-    echo "$T_NO_SESSIONS"; exit 1
-fi
-
-# ── Agents ────────────────────────────────────────────────────────────────────
-_agent_rows=()
-for _a in $AGENTS_KNOWN; do
-    _label="$(agent_title "$_a")"
-    agent_installed "$_a" || _label="$_label ($T_MISSING)"
-    [[ " $AGENTS " == *" $_a "* ]] && _state=ON || _state=OFF
-    _agent_rows+=("$_a" "$_label" "$_state")
-done
-AGENTS_RAW=$(whiptail --title "$T_TITLE" --checklist "$T_AGENTS_Q" 16 64 5 "${_agent_rows[@]}" \
-    3>&1 1>&2 2>&3) || { echo "$T_CANCELLED"; exit 0; }
-NEW_AGENTS=$(echo "$AGENTS_RAW" | tr -d '"' | xargs)
-[[ -n "$NEW_AGENTS" ]] || { echo "$T_NO_AGENTS"; exit 1; }
-
-# ── Time inputs ───────────────────────────────────────────────────────────────
-_ask() {
-    whiptail --title "$T_TITLE" --inputbox "$1" 8 42 "$2" 3>&1 1>&2 2>&3
+    (( ${#picked[@]} )) || return 1
+    printf '%s\n' "${picked[@]}" | sort -nu | paste -sd, -
 }
 
-if [[ "$NEW_MORNING_ENABLED" == "true" ]]; then
-    NEW_M_H=$(_ask "$T_M_HOUR" "$MORNING_HOUR")   || { echo "$T_CANCELLED"; exit 0; }
-    NEW_M_M=$(_ask "$T_M_MIN"  "$MORNING_MINUTE") || { echo "$T_CANCELLED"; exit 0; }
-else
-    NEW_M_H="$MORNING_HOUR"
-    NEW_M_M="$MORNING_MINUTE"
-fi
+_change_days() {
+    local days
+    while true; do
+        ui_clear
+        ui_section "$T_DAYS_TITLE"
+        printf '\n  %s%s\n\n' "$T_L_DAYS" "$(schedule_days)"
+        _week_line
+        printf '\n  %s\n\n' "$T_DAYS_HOW"
+        ui_option 0 "$U_BACK"
+        ui_choose "$T_DAYS_ASK" 7 many || return
+        [[ "$ANSWER" == 0 ]] && return
+        [[ -z "$ANSWER" ]] && continue
+        if days=$(_parse_days "$ANSWER"); then
+            _save WEEKDAYS "\"$days\""
+            return
+        fi
+        ui_warn "$T_BAD_DAYS"
+        sleep "$PAUSE"
+    done
+}
 
-if [[ "$NEW_AFTERNOON_ENABLED" == "true" ]]; then
-    NEW_A_H=$(_ask "$T_A_HOUR" "$AFTERNOON_HOUR")   || { echo "$T_CANCELLED"; exit 0; }
-    NEW_A_M=$(_ask "$T_A_MIN"  "$AFTERNOON_MINUTE") || { echo "$T_CANCELLED"; exit 0; }
-else
-    NEW_A_H="$AFTERNOON_HOUR"
-    NEW_A_M="$AFTERNOON_MINUTE"
-fi
+# A time like 07:30 starts with 0, so here 0 alone goes back only after Enter.
+_change_session() {  # MORNING, AFTERNOON or NIGHT, and its title word
+    local key="$1" enabled="${1}_ENABLED" others=0 s hour minute
+    for s in "${SESSIONS[@]}"; do
+        local flag="${s}_ENABLED"
+        [[ "$s" != "$key" && "${!flag}" == "true" ]] && others=$(( others + 1 ))
+    done
+    while true; do
+        ui_clear
+        ui_section "$(printf "$T_SESSION_TITLE" "$2")"
+        printf '\n  %s %s\n\n  %s\n\n' "$T_SESSION_NOW" "$(_session_text "$key")" "$T_SESSION_HOW"
+        ui_option 0 "$U_BACK"
+        ui_ask "$T_SESSION_ASK" || return
+        [[ "$ANSWER" == 0 ]] && return
+        [[ -z "$ANSWER" ]] && continue
+        if [[ "${ANSWER,,}" =~ ^(no|off|desactivar)$ ]]; then
+            if [[ "${!enabled}" == "true" ]] && (( others == 0 )); then
+                ui_warn "$T_LAST_SESSION"; sleep "$PAUSE"; continue
+            fi
+            _save "${key}_ENABLED" false
+            return
+        fi
+        if [[ "$ANSWER" =~ ^([0-9]{1,2})(:([0-9]{2}))?$ ]]; then
+            hour=$(( 10#${BASH_REMATCH[1]} )) minute=$(( 10#${BASH_REMATCH[3]:-0} ))
+            if (( hour <= 23 && minute <= 59 )); then
+                set_config "${key}_HOUR" "$hour"
+                set_config "${key}_MINUTE" "$minute"
+                _save "${key}_ENABLED" true
+                return
+            fi
+        fi
+        ui_warn "$T_BAD_TIME"
+        sleep "$PAUSE"
+    done
+}
 
-if [[ "$NEW_NIGHT_ENABLED" == "true" ]]; then
-    NEW_N_H=$(_ask "$T_N_HOUR" "$NIGHT_HOUR")   || { echo "$T_CANCELLED"; exit 0; }
-    NEW_N_M=$(_ask "$T_N_MIN"  "$NIGHT_MINUTE") || { echo "$T_CANCELLED"; exit 0; }
-else
-    NEW_N_H="$NIGHT_HOUR"
-    NEW_N_M="$NIGHT_MINUTE"
-fi
+_change_agents() {
+    local list=() agent n state word picked=() missing=""
+    for agent in $AGENTS_KNOWN; do list+=("$agent"); done
+    while true; do
+        ui_clear
+        ui_section "$T_AGENTS_TITLE"
+        echo ""
+        n=0
+        for agent in "${list[@]}"; do
+            n=$(( n + 1 ))
+            if ! agent_installed "$agent"; then state="${C_DIM}$T_MISSING${C_RESET}"
+            elif [[ " $AGENTS " == *" $agent "* ]]; then state="${C_GREEN}$T_IN${C_RESET}"
+            else state="$T_OUT"; fi
+            ui_option "$n" "$(printf '%-12s  %s' "$(agent_title "$agent")" "$state")"
+        done
+        printf '\n  %s\n\n' "$T_AGENTS_HOW"
+        ui_option 0 "$U_BACK"
+        ui_choose "$T_AGENTS_ASK" "${#list[@]}" many || return
+        [[ "$ANSWER" == 0 ]] && return
+        [[ -z "$ANSWER" ]] && continue
+        picked=() missing=""
+        for word in ${ANSWER//,/ }; do
+            if [[ "$word" =~ ^[0-9]+$ ]] && (( word >= 1 && word <= ${#list[@]} )); then
+                agent="${list[word - 1]}"
+                agent_installed "$agent" || missing="$agent"
+                [[ " ${picked[*]} " == *" $agent "* ]] || picked+=("$agent")
+            else
+                picked=(); break
+            fi
+        done
+        if [[ -n "$missing" ]]; then
+            ui_warn "$(printf "$T_NOT_INSTALLED" "$(agent_title "$missing")")"; sleep "$PAUSE"; continue
+        fi
+        if (( ${#picked[@]} == 0 )); then
+            ui_warn "$T_BAD_AGENTS"; sleep "$PAUSE"; continue
+        fi
+        _save AGENTS "\"${picked[*]}\""
+        return
+    done
+}
 
-# ── Validate ──────────────────────────────────────────────────────────────────
-_is_uint() { [[ "$1" =~ ^[0-9]+$ ]]; }
-_check_h() { _is_uint "$1" && (( $1 >= 0 && $1 <= 23 )) || { echo "$T_BAD_HOUR"; exit 1; }; }
-_check_m() { _is_uint "$1" && (( $1 >= 0 && $1 <= 59 )) || { echo "$T_BAD_MIN";  exit 1; }; }
+_show() {
+    local next
+    next=$(next_run_text) || next="$T_NONE"
+    printf '\n  %s%s\n' "$T_L_DAYS" "$(schedule_days)"
+    printf '  %s%s\n  %s%s\n  %s%s\n' "$T_L_MORNING" "$(_session_text MORNING)" \
+        "$T_L_AFTERNOON" "$(_session_text AFTERNOON)" "$T_L_NIGHT" "$(_session_text NIGHT)"
+    printf '  %s%s\n  %s%s\n' "$T_L_AGENTS" "$(_agents_text)" "$T_L_NEXT" "$next"
+}
 
-if [[ "$NEW_MORNING_ENABLED"   == "true" ]]; then _check_h "$NEW_M_H"; _check_m "$NEW_M_M"; fi
-if [[ "$NEW_AFTERNOON_ENABLED" == "true" ]]; then _check_h "$NEW_A_H"; _check_m "$NEW_A_M"; fi
-if [[ "$NEW_NIGHT_ENABLED"     == "true" ]]; then _check_h "$NEW_N_H"; _check_m "$NEW_N_M"; fi
-
-# ── Confirmation ──────────────────────────────────────────────────────────────
-[[ "$NEW_MORNING_ENABLED"   == "true" ]] && _ml=$(printf "$T_M_FMT" "$NEW_M_H" "$NEW_M_M") || _ml="$T_M_DIS"
-[[ "$NEW_AFTERNOON_ENABLED" == "true" ]] && _al=$(printf "$T_A_FMT" "$NEW_A_H" "$NEW_A_M") || _al="$T_A_DIS"
-[[ "$NEW_NIGHT_ENABLED"     == "true" ]] && _nl=$(printf "$T_N_FMT" "$NEW_N_H" "$NEW_N_M") || _nl="$T_N_DIS"
-_cl=$(printf "$T_AGENTS_FMT" "$NEW_AGENTS")
-
-SUMMARY=$(printf "%s\n%s\n%s\n%s\n%s" \
-    "$_ml" \
-    "$_al" \
-    "$_nl" \
-    "$(printf "$T_D_FMT" "$NEW_WEEKDAYS")" \
-    "$_cl")
-
-whiptail --title "$T_TITLE" --yesno "$T_CONFIRM\n\n$SUMMARY" 18 56 \
-    3>&1 1>&2 2>&3 || { echo "$T_CANCELLED"; exit 0; }
-
-# ── Update config.sh ──────────────────────────────────────────────────────────
-_set_conf() {
-    local key="$1" val="$2"
-    if grep -q "^${key}=" "$CONFIG_FILE" 2>/dev/null; then
-        sed -i "s|^${key}=.*|${key}=${val}|" "$CONFIG_FILE"
-    else
-        echo "${key}=${val}" >> "$CONFIG_FILE"
+FLASH=""
+while true; do
+    load_config
+    if [[ ! -t 0 ]]; then
+        ui_section "$T_TITLE"
+        _show
+        exit 0
     fi
-}
-
-_set_conf 'MORNING_HOUR'      "$NEW_M_H"
-_set_conf 'MORNING_MINUTE'    "$NEW_M_M"
-_set_conf 'MORNING_ENABLED'   "$NEW_MORNING_ENABLED"
-_set_conf 'AFTERNOON_HOUR'    "$NEW_A_H"
-_set_conf 'AFTERNOON_MINUTE'  "$NEW_A_M"
-_set_conf 'AFTERNOON_ENABLED' "$NEW_AFTERNOON_ENABLED"
-_set_conf 'NIGHT_HOUR'        "$NEW_N_H"
-_set_conf 'NIGHT_MINUTE'      "$NEW_N_M"
-_set_conf 'NIGHT_ENABLED'     "$NEW_NIGHT_ENABLED"
-_set_conf 'AGENTS'            "\"$NEW_AGENTS\""
-sed -i '/^CODEX_ENABLED=/d' "$CONFIG_FILE"
-_set_conf 'WEEKDAYS'          "\"$NEW_WEEKDAYS\""
-
-# ── Update crontab ────────────────────────────────────────────────────────────
-write_crontab
-
-# ── Result ────────────────────────────────────────────────────────────────────
-echo ""
-printf '\033[1;32m%s\033[0m\n' "$T_DONE"
-printf "  %s\n" "$_ml"
-printf "  %s\n" "$_al"
-printf "  %s\n" "$_nl"
-printf "  $T_D_FMT\n" "$NEW_WEEKDAYS"
-printf "  %s\n" "$_cl"
-echo ""
+    ui_clear
+    ui_section "$T_TITLE"
+    _show
+    [[ -n "$FLASH" ]] && { echo ""; ui_ok "$FLASH"; FLASH=""; }
+    ui_group "$T_CHANGE"
+    ui_option 1 "$T_M_DAYS"
+    ui_option 2 "$T_M_MORNING"
+    ui_option 3 "$T_M_AFTERNOON"
+    ui_option 4 "$T_M_NIGHT"
+    ui_option 5 "$T_M_AGENTS"
+    echo ""
+    ui_option 0 "$U_BACK"
+    ui_choose "$U_PICK" 5 || exit 0
+    case "$ANSWER" in
+        0) exit 0 ;;
+        1) _change_days ;;
+        2) _change_session MORNING "$T_MORNING" ;;
+        3) _change_session AFTERNOON "$T_AFTERNOON" ;;
+        4) _change_session NIGHT "$T_NIGHT" ;;
+        5) _change_agents ;;
+    esac
+done

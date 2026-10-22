@@ -2,7 +2,7 @@
 
 Opens the usage window of AI coding agents (Claude Code, Codex and OpenCode) at the hours the person picks: a
 cron sends each agent a short message, up to three times a day, and logs how it went. Plain bash on Ubuntu or
-Debian, with cron and whiptail, and no daemons. The repository is `JDCloud-Ecosystem/agent-keepalive` on GitHub,
+Debian, with cron, and no daemons. The repository is `JDCloud-Ecosystem/agent-keepalive` on GitHub,
 public.
 
 ---
@@ -14,7 +14,7 @@ public.
 | 1   | **NO COMMITS**; never `git add`, `git commit`, `git tag`, `git merge` or `git push`. The developer runs the commit guide.   |
 | 2   | **`main` always works.** Every install follows it with `keepalive update` (`git pull --ff-only`), so a merge is a release. |
 | 3   | **LF line endings.** `.gitattributes` enforces them; a script saved with CRLF breaks on Linux.                              |
-| 4   | **Both languages.** Every string a person sees lives in the `es` and the `en` block of its script.                          |
+| 4   | **Spanish only.** Every string a person sees is Spanish, and there is no language to pick.                                  |
 | 5   | **No secrets in output.** Never print a token, `.claude-token` or a login screen's code; log the account and the result.   |
 | 6   | **Never touch a real install while testing.** `test.sh` runs on a machine the developer chose, never on someone's server.   |
 | 7   | **pnpm only**, and only for the commit checks. The tool itself never needs Node to run its scripts.                         |
@@ -35,11 +35,12 @@ it in one reply. Correct mistakes directly and always with the technical why.
 | File                 | What it is                                                         |
 | -------------------- | ------------------------------------------------------------------ |
 | `keepalive`          | The command and its menu; `install.sh` links it into `~/.local/bin` |
-| `lib.sh`             | What the scripts share: agents, sessions, accounts and the cron    |
+| `lib.sh`             | What the scripts share: agents, accounts, the cron and the screens |
 | `session-starter.sh` | What the cron runs, one send per agent                             |
 | `login.sh`           | Connects Claude for a year                                         |
 | `install.sh`         | Installs what is missing and registers the cron                    |
-| `update-schedule.sh` | The schedule and agents editor                                     |
+| `update-schedule.sh` | The schedule and agents screen                                     |
+| `terminal-rc.sh`     | Startup file of the menu's terminal, where `menu` goes back        |
 | `test.sh`            | The full live test, on a real machine                              |
 | `uninstall.sh`       | Removes everything                                                 |
 | `version.txt`        | The version; Release Please writes it                              |
@@ -92,8 +93,11 @@ case, such as `install`, `login`, `logout`, `schedule`, `status`, `cron`, `lib`,
 `pr-title-check.yml` checks the pull request title. A `feat` or `fix` title is read by whoever updates, so write
 it for that person.
 
-The commit guide is one title line and one `bash` block: every `git add <paths> && git commit -m "…"`, the push
-and `gh pr create`. `git add` names paths, never `-A` or `.`. It never changes the version or tags.
+The commit guide is one title line and one `bash` block with no headings, prose or comments: the branch, every
+`git add <paths> && git commit -m "…"`, the push and `gh pr create`. Whoever runs it may be on Windows, macOS or
+Linux, in any terminal, so it holds plain `git` and `gh` and nothing else, never `$(…)`, pipes, `cp`, `sed` or
+`sha256sum`. Work prepared off `main` ships as `tmp/{english-slug}/changes.patch`, applied with `git apply`.
+`git add` names paths, never `-A` or `.`. It never changes the version or tags.
 
 ---
 
@@ -112,5 +116,11 @@ and `gh pr create`. `git add` names paths, never `-A` or `.`. It never changes t
 - **Root cause first.** A symptom fix is a failure.
 - **Match the scripts.** `set -uo pipefail` in the scripts a person runs, section headers as `# ── Name ──…`,
   functions in `lib.sh` when two scripts need them.
+- **One look for every screen.** The `ui_` functions of `lib.sh` draw them all. The title goes in capitals between
+  two rules, options are numbered under small headings and lists are tables (`ui_table`). An option nothing else
+  starts with is taken with one key, with no Enter (`ui_choose`), and `0` goes back from every screen. Tags are
+  coloured text, never a background. No whiptail.
+- **Plain Spanish on screen.** No colon or semicolon inside a sentence, no em dash, no ellipsis; a comma, a
+  period or parentheses take their place.
 - **Comments in English**, only for a non-obvious why. Never narrate the change, never commented-out code.
 - **No magic numbers.** Name the constant.

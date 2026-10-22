@@ -1,13 +1,14 @@
 #!/bin/bash
 # agent-keepalive in one command. install.sh links it as ~/.local/bin/keepalive.
-#   keepalive                 menu
-#   keepalive status          agents, logins, schedule and last runs
+#   keepalive                 the menu, with every option and a terminal
+#   keepalive status          agents, accounts, schedule, next send and last runs
 #   keepalive login [agent]   connect an agent (Claude: a token that lasts a year)
 #   keepalive logout [agent]  close an agent's session on this machine (--yes skips the questions)
-#   keepalive schedule        hours, days and which agents run
+#   keepalive schedule        days, hours and which agents run
 #   keepalive test            run every chosen agent now
 #   keepalive log [agent]     recent runs
-#   keepalive update          latest version, same settings
+#   keepalive update          latest agent-keepalive, same settings
+#   keepalive update-agents   latest Claude Code, Codex and OpenCode, same logins
 #   keepalive uninstall
 set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
@@ -16,111 +17,73 @@ source "$SCRIPT_DIR/lib.sh"
 load_config
 migrate_token
 
-if [[ "${LANGUAGE:-es}" == "es" ]]; then
-    T_TITLE="Sesiones automáticas de tus agentes"
-    T_SCHEDULE="Horario"; T_AT="a las"; T_AND="y"; T_OFF="sin sesiones activas"
-    T_EVERY_DAY="todos los días"; T_WEEKDAYS="de lunes a viernes"
-    T_DAYS=("domingo" "lunes" "martes" "miércoles" "jueves" "viernes" "sábado")
-    T_ON="en la sesión automática"; T_NOT_ON="fuera de la sesión automática"
-    T_NOT_INSTALLED="no instalado"; T_NO_LOGIN="falta iniciar sesión"; T_LOGIN_OK="con sesión"
-    T_YEAR="conectado hasta el"; T_LAST="último envío"; T_NEVER="todavía ninguno"
-    T_RUN_OK="salió bien"; T_RUN_LIMIT="la ventana ya estaba abierta"; T_RUN_ERROR="falló"; T_FIX="para arreglarlo"
-    T_RUN_WEEKLY="la cuenta llegó a su límite semanal"
-    T_ACCOUNT="cuenta"; T_NO_ACCOUNT="ninguna"; T_API_KEY="llave de API"
-    T_UNKNOWN="sin anotar; vuelve a conectar con keepalive login claude para verla aquí"
-    # Tags in front of each agent, all ten columns wide
-    T_B_OK="    OK    "; T_B_FAIL="  FALLÓ   "; T_B_LOGIN="SIN SESIÓN"; T_B_LIMIT="  LÍMITE  "; T_B_WAIT="  ESPERA  "
-    T_B_OFF="  FUERA   "
-    T_MENU="¿Qué quieres hacer?"; T_M_STATUS="Ver el estado"; T_M_LOGIN="Conectar un agente"
-    T_M_SCHEDULE="Cambiar el horario y los agentes"; T_M_TEST="Probar ahora"; T_M_LOG="Ver el historial"
-    T_M_UPDATE="Actualizar agent-keepalive"; T_WHICH="¿Qué agente conectas?"; T_UPDATED="Actualizado; tu horario sigue igual."
-    T_M_LOGOUT="Cerrar la sesión de un agente"; T_WHICH_OUT="¿De qué agente cierras la sesión?"
-    T_NONE_IN="Ningún agente tiene una sesión abierta en esta máquina."
-    T_NO_SESSION="%s no tiene una sesión abierta en esta máquina."
-    T_NAME_IT="Indica el agente: keepalive logout claude|codex|opencode"
-    T_CONFIRM="¿Cerrar la sesión de %s, cuenta %s? (s/n): "; T_CONFIRM_BARE="¿Cerrar la sesión de %s? (s/n): "
-    T_CANCELLED="No se cerró nada."
-    T_LOGGED_OUT="Listo, %s quedó sin sesión en esta máquina."
-    T_UNSET="Las terminales nuevas ya no llevan el token de Claude. En esta escribe: unset CLAUDE_CODE_OAUTH_TOKEN"
-    T_STILL="No se pudo cerrar la sesión de %s. Sus credenciales siguen en esta máquina."
-    T_ASK_LEAVE="¿Sacas también a %s de la sesión automática? (S/n): "
-    T_LEFT="%s salió de la sesión automática y el cron quedó al día."
-    T_STAYS="%s sigue en la sesión automática; sus envíos fallarán hasta que lo vuelvas a conectar."
-    T_ONLY_ONE="%s sigue en la sesión automática porque es el único agente; sus envíos fallarán hasta que lo vuelvas a conectar."
-else
-    T_TITLE="Your agents' automatic sessions"
-    T_SCHEDULE="Schedule"; T_AT="at"; T_AND="and"; T_OFF="no sessions enabled"
-    T_EVERY_DAY="every day"; T_WEEKDAYS="Monday to Friday"
-    T_DAYS=("Sunday" "Monday" "Tuesday" "Wednesday" "Thursday" "Friday" "Saturday")
-    T_ON="in the automatic session"; T_NOT_ON="not in the automatic session"
-    T_NOT_INSTALLED="not installed"; T_NO_LOGIN="needs a login"; T_LOGIN_OK="logged in"
-    T_YEAR="connected until"; T_LAST="last run"; T_NEVER="none yet"
-    T_RUN_OK="went fine"; T_RUN_LIMIT="the window was already open"; T_RUN_ERROR="failed"; T_FIX="to fix it"
-    T_RUN_WEEKLY="the account reached its weekly limit"
-    T_ACCOUNT="account"; T_NO_ACCOUNT="none"; T_API_KEY="API key"
-    T_UNKNOWN="not noted; reconnect with keepalive login claude to see it here"
-    T_B_OK="    OK    "; T_B_FAIL="  FAILED  "; T_B_LOGIN=" NO LOGIN "; T_B_LIMIT="  LIMIT   "; T_B_WAIT="   WAIT   "
-    T_B_OFF="   OFF    "
-    T_MENU="What do you want to do?"; T_M_STATUS="See the status"; T_M_LOGIN="Connect an agent"
-    T_M_SCHEDULE="Change the schedule and agents"; T_M_TEST="Test now"; T_M_LOG="See the history"
-    T_M_UPDATE="Update agent-keepalive"; T_WHICH="Which agent do you connect?"; T_UPDATED="Updated; your schedule stays the same."
-    T_M_LOGOUT="Log out an agent"; T_WHICH_OUT="Which agent do you log out?"
-    T_NONE_IN="No agent has an open session on this machine."
-    T_NO_SESSION="%s has no open session on this machine."
-    T_NAME_IT="Name the agent: keepalive logout claude|codex|opencode"
-    T_CONFIRM="Log out %s, account %s? (y/n): "; T_CONFIRM_BARE="Log out %s? (y/n): "
-    T_CANCELLED="Nothing was closed."
-    T_LOGGED_OUT="Done, %s has no session on this machine any more."
-    T_UNSET="New terminals no longer carry the Claude token. In this one run: unset CLAUDE_CODE_OAUTH_TOKEN"
-    T_STILL="Could not log out %s. Its credentials are still on this machine."
-    T_ASK_LEAVE="Take %s out of the automatic session too? (Y/n): "
-    T_LEFT="%s left the automatic session and the cron is up to date."
-    T_STAYS="%s stays in the automatic session; its runs will fail until you connect it again."
-    T_ONLY_ONE="%s stays in the automatic session because it is the only agent; its runs will fail until you connect it again."
-fi
+SEP=$'\x1f'  # splits the cells of a table row
+DAY=86400
+RENEW_DAYS=30  # how long before the year token ends the menu starts saying so
 
-_hours() {
-    local list=()
-    [[ "$MORNING_ENABLED" == "true" ]] && list+=("$(printf '%02d:%02d' "$MORNING_HOUR" "$MORNING_MINUTE")")
-    [[ "$AFTERNOON_ENABLED" == "true" ]] && list+=("$(printf '%02d:%02d' "$AFTERNOON_HOUR" "$AFTERNOON_MINUTE")")
-    [[ "$NIGHT_ENABLED" == "true" ]] && list+=("$(printf '%02d:%02d' "$NIGHT_HOUR" "$NIGHT_MINUTE")")
-    (( ${#list[@]} == 0 )) && { echo "$T_OFF"; return; }
-    local days=() d when
-    IFS=',' read -ra picked <<< "$WEEKDAYS"
-    for d in "${picked[@]}"; do days+=("${T_DAYS[$d]}"); done
-    case "$(printf '%s\n' "${picked[@]}" | sort -n | tr '\n' ',')" in
-        "0,1,2,3,4,5,6,") when="$T_EVERY_DAY" ;;
-        "1,2,3,4,5,") when="$T_WEEKDAYS" ;;
-        *) when="$(_join "${days[@]}")" ;;
-    esac
-    echo "$T_AT $(_join "${list[@]}"), $when"
-}
+T_TITLE="SESIONES AUTOMÁTICAS DE TUS AGENTES"
+T_SCHEDULE="Horario        "; T_NEXT="Próximo envío  "; T_NEXT_NONE="ninguno, no hay días ni sesiones activas"
+T_H_STATE="Estado"; T_H_AGENT="Agente"; T_H_SESSION="Sesión"; T_H_ACCOUNT="Cuenta"; T_H_LAST="Último envío"
+T_NOT_ON="fuera de la sesión automática"
+T_NOT_INSTALLED="no instalado"; T_NO_LOGIN="sin sesión"; T_LOGIN_OK="con sesión"; T_YEAR="hasta el"
+T_NEVER="todavía ninguno"; T_NO_ACCOUNT="sin cuenta"; T_API_KEY="llave de API"
+T_UNKNOWN="cuenta sin anotar, vuelve a conectar Claude para verla aquí"
+T_OPTION_LOGIN="«Conectar o cambiar una cuenta»"
+# Tags in front of each agent; their colour is the only thing that marks them, never a background
+T_B_OK="OK"; T_B_FAIL="FALLÓ"; T_B_LOGIN="SIN SESIÓN"; T_B_LIMIT="LÍMITE"; T_B_WAIT="ESPERA"; T_B_OFF="FUERA"
+T_N_MISSING="%s no está instalado. Instálalo con sudo npm install -g %s."
+T_N_LOGIN_MENU="Conecta %s en $T_OPTION_LOGIN."; T_N_LOGIN_CMD="Conecta %s con %s."
+T_N_RELOGIN_MENU="El último envío a %s falló porque su sesión venció. Conéctalo otra vez en $T_OPTION_LOGIN."
+T_N_FIX="El último envío a %s falló, para arreglarlo corre %s."
+T_N_SILENT="%s no respondió en 3 minutos en su último envío."
+T_N_FAILED="El último envío a %s falló. El historial dice qué respondió."
+T_N_WEEKLY="La cuenta de %s llegó a su límite semanal y se libera sola."
+T_N_RENEW="La conexión de Claude vence el %s, renuévala en $T_OPTION_LOGIN."
+T_G_SESSIONS="SESIONES AUTOMÁTICAS"; T_G_ACCOUNTS="CUENTAS"; T_G_UPDATE="ACTUALIZAR"; T_G_TERMINAL="TERMINAL"
+T_M_TEST="Probar ahora"; T_M_LOG="Ver el historial de envíos"; T_M_SCHEDULE="Cambiar el horario o los agentes"
+T_M_LOGIN="Conectar o cambiar una cuenta"; T_M_LOGOUT="Cerrar la sesión de una cuenta"
+T_M_UPGRADE="Actualizar Claude Code, Codex y OpenCode"; T_M_UPDATE="Actualizar agent-keepalive"
+T_M_TERMINAL="Usar la terminal"; T_M_EXIT="Salir"
+T_LOG_TITLE="HISTORIAL DE ENVÍOS"; T_H_WHEN="Cuándo"; T_H_RESULT="Resultado"; T_H_WHAT="Qué pasó"
+T_R_OK="OK"; T_R_LIMIT="LÍMITE"; T_R_ERROR="FALLÓ"
+T_LOGIN_TITLE="CONECTAR O CAMBIAR UNA CUENTA"; T_LOGOUT_TITLE="CERRAR LA SESIÓN DE UNA CUENTA"
+T_PICK_AGENT="Elige un agente"; T_CONNECT_TITLE="CONECTAR %s"
+T_CONNECT_STEPS="Abre en tu navegador el enlace que aparezca, autoriza y, si te da un código, pégalo aquí."
+T_CONNECTED="%s quedó conectado"; T_NOT_CONNECTED="%s sigue sin sesión. Si no terminaste el inicio de sesión, vuelve a intentarlo."
+T_ASK_JOIN="¿Sumas a %s a la sesión automática?"; T_JOINED="%s entra a la sesión automática y el cron quedó al día."
+T_NAME_LOGIN="Indica el agente, como keepalive login claude, codex u opencode."
+T_UNKNOWN_AGENT="No hay un agente llamado %s. Los que hay son claude, codex y opencode."
+T_MISSING="%s no está instalado. Instálalo con sudo npm install -g %s."
+T_NONE_IN="Ningún agente tiene una sesión abierta en esta máquina."
+T_NO_SESSION="%s no tiene una sesión abierta en esta máquina."
+T_NAME_IT="Indica el agente, como keepalive logout claude, codex u opencode."
+T_CONFIRM="¿Cerrar la sesión de %s, cuenta %s?"; T_CONFIRM_BARE="¿Cerrar la sesión de %s?"
+T_CANCELLED="No se cerró nada."
+T_LOGGED_OUT="Listo, %s quedó sin sesión en esta máquina."
+T_UNSET="Las terminales nuevas ya no llevan el token de Claude. En una que ya estaba abierta escribe unset CLAUDE_CODE_OAUTH_TOKEN."
+T_STILL="No se pudo cerrar la sesión de %s. Sus credenciales siguen en esta máquina."
+T_ASK_LEAVE="¿Sacas también a %s de la sesión automática?"
+T_LEFT="%s salió de la sesión automática y el cron quedó al día."
+T_STAYS="%s sigue en la sesión automática, y sus envíos fallarán hasta que lo vuelvas a conectar."
+T_ONLY_ONE="%s sigue en la sesión automática porque es el único agente, y sus envíos fallarán hasta que lo vuelvas a conectar."
+T_UPDATE_TITLE="ACTUALIZAR AGENT-KEEPALIVE"; T_UPDATING="Bajando la versión más reciente."
+T_UPDATED="Actualizado de %s a %s. Tu horario sigue igual."; T_UP_TO_DATE="Ya tenías la versión más reciente, %s."
+T_UPDATE_FAILED="No se pudo actualizar. Esto respondió git."; T_REOPEN="El menú se abre otra vez con la versión nueva."
+T_UPGRADE_TITLE="ACTUALIZAR CLAUDE CODE, CODEX Y OPENCODE"
+T_UPGRADE_NOTE="Tus sesiones y cuentas no cambian. Cada agente tarda alrededor de un minuto."
+T_UPGRADING="Actualizando %s"; T_UPGRADED="%s pasó de %s a %s"; T_SAME="%s ya estaba al día, %s"
+T_BUSY="%s está abierto en este momento, ciérralo y vuelve a intentarlo."
+T_UPGRADE_FAILED="No se pudo actualizar %s. Esto respondió."
+T_NEEDS_SUDO="Para instalarlo hace falta sudo, y te puede pedir tu contraseña."
+T_TERMINAL_TITLE="TERMINAL"; T_TERMINAL_BACK="Escribe menu para volver al menú."
+T_UNKNOWN_COMMAND="keepalive no tiene el comando %s. Con keepalive help ves los que hay."
 
-_join() {  # a, b and c
-    local out="" i
-    for (( i = 1; i <= $#; i++ )); do
-        if (( i == 1 )); then out="${!i}"; elif (( i == $# )); then out="$out $T_AND ${!i}"; else out="$out, ${!i}"; fi
-    done
-    echo "$out"
-}
-
-_last_run() {  # prints "result|text", result being ok, limit, weekly, error or never
-    local line when fix
+# ── Status ────────────────────────────────────────────────────────────────────
+_last_run() {  # prints "result|when|what", result being ok, limit, weekly, error or never
+    local line
     line=$(grep -sE '\] (OK|LIMIT|ERROR)' "$(agent_log "$1")" | tail -1)
-    [[ -z "$line" ]] && { echo "never|$T_NEVER"; return; }
-    when=$(echo "$line" | sed -E 's/^\[[0-9]{4}-([0-9]{2})-([0-9]{2}) ([0-9]{2}:[0-9]{2}).*/\2\/\1 \3/')
-    case "$line" in
-        *"] OK"*) echo "ok|$when, $T_RUN_OK" ;;
-        *"] LIMIT (weekly"*) echo "weekly|$when, $T_RUN_WEEKLY" ;;
-        *"] LIMIT"*) echo "limit|$when, $T_RUN_LIMIT" ;;
-        *)
-            fix=$(echo "$line" | sed -nE 's/.*run: ([^|]*).*/\1/p' | sed 's/ *$//')
-            echo "error|$when, $T_RUN_ERROR${fix:+; $T_FIX: $fix}" ;;
-    esac
-}
-
-_badge() {  # background color code, then the label: black text on a colored block
-    printf '\033[30;%sm%s\033[0m' "$1" "$2"
+    [[ -z "$line" ]] && { echo "never||$T_NEVER"; return; }
+    describe_run "$line"
 }
 
 # Who an agent is connected as: the email and plan when the agent keeps them, otherwise its provider.
@@ -171,77 +134,186 @@ elif agent == "opencode":
              "github-copilot": "GitHub Copilot", "google": "Google"}
     shown = []
     for provider, entry in auth.items():
+        entry = entry if isinstance(entry, dict) else {}
         found = claims(entry.get("access") or "")
         detail = found.get("email") or (found.get("https://api.openai.com/profile") or {}).get("email") \
             or (api_key if entry.get("type") == "api" else "")
-        shown.append(names.get(provider, provider) + (f", {detail}" if detail else ""))
-    print("; ".join(shown))
+        shown.append(names.get(provider, provider) + (f" ({detail})" if detail else ""))
+    print(", ".join(shown))
 PY
 }
 
-status() {
-    printf '\n\033[1;36m%s\033[0m\n' "$T_TITLE"
-    printf '%s: %s\n\n' "$T_SCHEDULE" "$(_hours)"
-    local agent state ready run badge account
+# Every agent in one table, with its tag, name, session, account and last send, and below it one line for each
+# agent that needs something done. With "brief", as in the menu, the session column goes, an agent outside the
+# automatic session shows only when it has a session, and a fix points to the menu option instead of a command.
+_agents_table() {  # full|brief
+    local mode="$1" agent title tag color session account last run result when what fix until ends notes=() rows=()
     for agent in $AGENTS_KNOWN; do
-        ready=false
+        title=$(agent_title "$agent")
+        local in=false ready=false
+        [[ " $AGENTS " == *" $agent "* ]] && in=true
         if ! agent_installed "$agent"; then
-            [[ " $AGENTS " == *" $agent "* ]] || continue
-            state="$T_NOT_INSTALLED"
-        elif [[ "$agent" == "claude" && -s "$CLAUDE_TOKEN" ]]; then
-            state="$T_YEAR $(date -d "$(cat "$CLAUDE_TOKEN.created" 2>/dev/null || date +%F) +1 year" '+%d/%m/%Y')"
-            ready=true
-        elif agent_logged_in "$agent"; then
-            state="$T_LOGIN_OK"
-            ready=true
+            [[ "$in" == true ]] || continue
+            tag="$T_B_FAIL" color="$C_RED" session="$T_NOT_INSTALLED" account="" last=""
+            notes+=("$C_RED$(printf "$T_N_MISSING" "$title" "$(agent_package "$agent")")$C_RESET")
         else
-            state="$T_NO_LOGIN: $(agent_login_command "$agent")"
+            if [[ "$agent" == claude && -s "$CLAUDE_TOKEN" ]]; then
+                ends=$(date -d "$(cat "$CLAUDE_TOKEN.created" 2>/dev/null || date +%F) +1 year" +%s)
+                until=$(date -d "@$ends" '+%d/%m/%Y')
+                session="$T_YEAR $until" ready=true
+                (( ends - $(date +%s) < RENEW_DAYS * DAY )) && notes+=("$C_YELLOW$(printf "$T_N_RENEW" "$until")$C_RESET")
+            elif agent_logged_in "$agent"; then
+                session="$T_LOGIN_OK" ready=true
+            else
+                session="$T_NO_LOGIN"
+            fi
+            account=""
+            [[ "$ready" == true ]] && account=$(_account "$agent") && account="${account:-$T_NO_ACCOUNT}"
+            if [[ "$in" == false ]]; then
+                [[ "$mode" == brief && "$ready" == false ]] && continue
+                tag="$T_B_OFF" color="$C_DIM" last="$T_NOT_ON"
+            elif [[ "$ready" == false ]]; then
+                tag="$T_B_LOGIN" color="$C_RED" last=""
+                if [[ "$mode" == brief ]]; then
+                    notes+=("$C_RED$(printf "$T_N_LOGIN_MENU" "$title")$C_RESET")
+                else
+                    notes+=("$C_RED$(printf "$T_N_LOGIN_CMD" "$title" "$(agent_login_command "$agent")")$C_RESET")
+                fi
+            else
+                run=$(_last_run "$agent")
+                result="${run%%|*}" when="${run#*|}" when="${when%%|*}" what="${run##*|}"
+                last="${when:+$when, }${what%%, *}"
+                case "$result" in
+                    error)
+                        tag="$T_B_FAIL" color="$C_RED"
+                        fix="${what#*"$U_FIX "}"
+                        if [[ "$what" == "$U_RUN_SILENT" ]]; then
+                            notes+=("$C_RED$(printf "$T_N_SILENT" "$title")$C_RESET")
+                        elif [[ "$fix" == "$what" ]]; then
+                            notes+=("$C_RED$(printf "$T_N_FAILED" "$title")$C_RESET")
+                        elif [[ "$mode" == brief && "$fix" == *login* ]]; then
+                            notes+=("$C_RED$(printf "$T_N_RELOGIN_MENU" "$title")$C_RESET")
+                        else
+                            notes+=("$C_RED$(printf "$T_N_FIX" "$title" "$fix")$C_RESET")
+                        fi ;;
+                    weekly) tag="$T_B_LIMIT" color="$C_YELLOW"
+                            notes+=("$C_YELLOW$(printf "$T_N_WEEKLY" "$title")$C_RESET") ;;
+                    never) tag="$T_B_WAIT" color="$C_CYAN" ;;
+                    *) tag="$T_B_OK" color="$C_GREEN" ;;
+                esac
+            fi
         fi
-        account=$(agent_installed "$agent" && agent_logged_in "$agent" && _account "$agent")
-        if [[ " $AGENTS " != *" $agent "* ]]; then
-            printf '%s \033[0;37m%-12s %s, %s.\n%24s%s: %s\033[0m\n' "$(_badge 47 "$T_B_OFF")" "$(agent_title "$agent")" \
-                "$T_NOT_ON" "$state" "" "$T_ACCOUNT" "${account:-$T_NO_ACCOUNT}"
-            continue
-        fi
-        run=$(_last_run "$agent")
-        if ! agent_installed "$agent"; then
-            badge=$(_badge 41 "$T_B_FAIL")
-        elif [[ "$ready" == false ]]; then
-            badge=$(_badge 41 "$T_B_LOGIN")
+        if [[ "$mode" == brief ]]; then
+            rows+=("$color$tag$C_RESET$SEP$title$SEP$C_DIM$account$C_RESET$SEP$last")
         else
-            case "${run%%|*}" in
-                error) badge=$(_badge 41 "$T_B_FAIL") ;;
-                weekly) badge=$(_badge 43 "$T_B_LIMIT") ;;
-                never) badge=$(_badge 46 "$T_B_WAIT") ;;
-                *) badge=$(_badge 42 "$T_B_OK") ;;
-            esac
+            rows+=("$color$tag$C_RESET$SEP$title$SEP$session$SEP$C_DIM$account$C_RESET$SEP$last")
         fi
-        printf '%s \033[1m%-12s\033[0m %s, %s.\n%24s%s: %s\n%24s%s: %s\n' "$badge" "$(agent_title "$agent")" \
-            "$T_ON" "$state" "" "$T_ACCOUNT" "${account:-$T_NO_ACCOUNT}" "" "$T_LAST" "${run#*|}"
     done
+    {
+        if [[ "$mode" == brief ]]; then
+            printf '%s\n' "$T_H_STATE$SEP$T_H_AGENT$SEP$T_H_ACCOUNT$SEP$T_H_LAST"
+        else
+            printf '%s\n' "$T_H_STATE$SEP$T_H_AGENT$SEP$T_H_SESSION$SEP$T_H_ACCOUNT$SEP$T_H_LAST"
+        fi
+        (( ${#rows[@]} )) && printf '%s\n' "${rows[@]}"
+    } | ui_table
+    (( ${#notes[@]} )) && printf '  %s\n' "${notes[@]}"
+    return 0
+}
+
+_overview() {  # full|brief
+    local next
+    ui_section "$T_TITLE"
+    next=$(next_run_text) || next="$T_NEXT_NONE"
+    printf '\n  %s%s\n  %s%s\n\n' "$T_SCHEDULE" "$(schedule_text)" "$T_NEXT" "$next"
+    _agents_table "$1"
+}
+
+status() {
+    _overview full
     echo ""
 }
 
-login() {
-    local agent="${1:-}"
-    if [[ -z "$agent" ]]; then
-        local options=() a
-        for a in $AGENTS_KNOWN; do agent_installed "$a" && options+=("$a" "$(agent_title "$a")"); done
-        agent=$(whiptail --title "agent-keepalive" --menu "$T_WHICH" 15 50 6 "${options[@]}" 3>&1 1>&2 2>&3) || return 0
-    fi
-    case "$agent" in
-        claude) exec "$SCRIPT_DIR/login.sh" ;;
-        codex) exec codex login --device-auth ;;
-        opencode) exec opencode auth login ;;
-        *) echo "agent?: $AGENTS_KNOWN"; return 1 ;;
-    esac
+# ── Accounts ──────────────────────────────────────────────────────────────────
+_login_state() {
+    local account
+    if ! agent_logged_in "$1"; then echo "$T_NO_LOGIN"; return; fi
+    account=$(_account "$1")
+    echo "$T_LOGIN_OK${account:+, $account}"
 }
 
-_yes() {  # s, sí, y or yes in any case; an empty answer counts as $1
-    local answer
-    read -r answer || answer=""
-    [[ -z "$answer" ]] && { [[ "$1" == true ]]; return; }
-    [[ "${answer,,}" =~ ^(s|si|sí|y|yes)$ ]]
+# Draws the agents of one kind with their state and sets PICKED to the one chosen; returns BACK on 0.
+_pick_agent() {  # title, installed|logged_in
+    local options=() a n
+    for a in $AGENTS_KNOWN; do
+        case "$2" in
+            installed) agent_installed "$a" ;;
+            logged_in) agent_logged_in "$a" ;;
+        esac && options+=("$a")
+    done
+    (( ${#options[@]} )) || return 1
+    while true; do
+        ui_clear
+        ui_section "$1"
+        echo ""
+        n=0
+        for a in "${options[@]}"; do
+            n=$(( n + 1 ))
+            ui_option "$n" "$(printf '%-12s  %s' "$(agent_title "$a")" "$(_login_state "$a")")"
+        done
+        echo ""
+        ui_option 0 "$U_BACK"
+        ui_choose "$T_PICK_AGENT" "${#options[@]}" text || return "$BACK"
+        [[ "$ANSWER" == 0 ]] && return "$BACK"
+        if [[ "$ANSWER" =~ ^[0-9]+$ ]] && (( ANSWER >= 1 && ANSWER <= ${#options[@]} )); then
+            PICKED="${options[ANSWER - 1]}"
+            return 0
+        fi
+        for a in "${options[@]}"; do [[ "${ANSWER,,}" == "$a" ]] && { PICKED="$a"; return 0; }; done
+    done
+}
+
+# A newly connected agent outside the automatic session is offered a place in it.
+_join_schedule() {
+    [[ " $AGENTS " == *" $1 "* ]] && return 0
+    ui_yes "$(printf "$T_ASK_JOIN" "$(agent_title "$1")")" true || return 0
+    set_config AGENTS "\"$AGENTS $1\""
+    write_crontab
+    ui_ok "$(printf "$T_JOINED" "$(agent_title "$1")")"
+}
+
+login() {
+    local agent="${1:-}" account
+    if [[ -z "$agent" ]]; then
+        [[ -t 0 ]] || { echo "$T_NAME_LOGIN"; return 1; }
+        _pick_agent "$T_LOGIN_TITLE" installed || return
+        agent="$PICKED"
+        ui_clear
+    fi
+    [[ " $AGENTS_KNOWN " == *" $agent "* ]] || { printf "$T_UNKNOWN_AGENT\n" "$agent"; return 1; }
+    if ! agent_installed "$agent"; then
+        ui_fail "$(printf "$T_MISSING" "$(agent_title "$agent")" "$(agent_package "$agent")")"
+        return 1
+    fi
+    if [[ "$agent" == claude ]]; then
+        bash "$SCRIPT_DIR/login.sh" || return 1
+    else
+        ui_section "$(printf "$T_CONNECT_TITLE" "$(agent_title "$agent" | tr '[:lower:]' '[:upper:]')")"
+        printf '\n  %s\n\n' "$T_CONNECT_STEPS"
+        case "$agent" in
+            codex) codex login --device-auth ;;
+            opencode) opencode auth login ;;
+        esac
+        echo ""
+        if ! agent_logged_in "$agent"; then
+            ui_warn "$(printf "$T_NOT_CONNECTED" "$(agent_title "$agent")")"
+            return 1
+        fi
+        account=$(_account "$agent")
+        ui_ok "$(printf "$T_CONNECTED" "$(agent_title "$agent")")${account:+, $account}."
+    fi
+    agent_logged_in "$agent" && _join_schedule "$agent"
+    return 0
 }
 
 # Removes what each agent keeps to stay signed in. Claude also loses its year token and the .bashrc lines
@@ -271,22 +343,23 @@ _leave_schedule() {  # agent, whether --yes was given
     local rest
     rest=$(echo " $AGENTS " | sed "s/ $1 / /" | xargs)
     if [[ -z "$rest" ]]; then
-        printf "$T_ONLY_ONE\n" "$(agent_title "$1")"
+        ui_note "$(printf "$T_ONLY_ONE" "$(agent_title "$1")")"
         return 0
     fi
     if [[ "$2" == false ]]; then
-        printf "$T_ASK_LEAVE" "$(agent_title "$1")"
-        _yes true || { printf "$T_STAYS\n" "$(agent_title "$1")"; return 0; }
+        ui_yes "$(printf "$T_ASK_LEAVE" "$(agent_title "$1")")" true \
+            || { ui_note "$(printf "$T_STAYS" "$(agent_title "$1")")"; return 0; }
     fi
     set_config AGENTS "\"$rest\""
     write_crontab
-    printf "$T_LEFT\n" "$(agent_title "$1")"
+    ui_ok "$(printf "$T_LEFT" "$(agent_title "$1")")"
 }
 
 # Exit codes: 0 when the agent has no session here any more (closed now, or it had none), 1 for an unknown
-# agent, a missing name without a terminal or credentials that could not be removed, 2 when the person says no.
+# agent, a missing name without a terminal or credentials that could not be removed, 2 when the person says no,
+# and BACK when they went back from the list.
 logout() {
-    local agent="" yes=false arg account
+    local agent="" yes=false arg account question
     for arg in "$@"; do
         case "$arg" in
             --yes|-y) yes=true ;;
@@ -294,76 +367,236 @@ logout() {
         esac
     done
     if [[ -z "$agent" ]]; then
-        local options=() a
-        for a in $AGENTS_KNOWN; do agent_logged_in "$a" && options+=("$a" "$(agent_title "$a")"); done
-        (( ${#options[@]} )) || { echo "$T_NONE_IN"; return 0; }
-        if ! command -v whiptail >/dev/null 2>&1 || [[ ! -t 0 ]]; then echo "$T_NAME_IT"; return 1; fi
-        agent=$(whiptail --title "agent-keepalive" --menu "$T_WHICH_OUT" 15 50 6 "${options[@]}" 3>&1 1>&2 2>&3) || return 2
+        [[ -t 0 ]] || { echo "$T_NAME_IT"; return 1; }
+        _pick_agent "$T_LOGOUT_TITLE" logged_in
+        case $? in
+            0) agent="$PICKED" ;;
+            1) ui_note "$T_NONE_IN"; return 0 ;;
+            *) return "$BACK" ;;
+        esac
     fi
-    [[ " $AGENTS_KNOWN " == *" $agent "* ]] || { echo "agent?: $AGENTS_KNOWN"; return 1; }
+    [[ " $AGENTS_KNOWN " == *" $agent "* ]] || { printf "$T_UNKNOWN_AGENT\n" "$agent"; return 1; }
     if ! agent_logged_in "$agent"; then
-        printf "$T_NO_SESSION\n" "$(agent_title "$agent")"
+        ui_note "$(printf "$T_NO_SESSION" "$(agent_title "$agent")")"
         return 0
     fi
     account=$(_account "$agent")
     [[ "$account" == "$T_UNKNOWN" ]] && account=""
     if [[ "$yes" == false ]]; then
         if [[ -n "$account" ]]; then
-            printf "$T_CONFIRM" "$(agent_title "$agent")" "$account"
+            question=$(printf "$T_CONFIRM" "$(agent_title "$agent")" "$account")
         else
-            printf "$T_CONFIRM_BARE" "$(agent_title "$agent")"
+            question=$(printf "$T_CONFIRM_BARE" "$(agent_title "$agent")")
         fi
-        _yes false || { echo "$T_CANCELLED"; return 2; }
+        ui_yes "$question" false || { ui_note "$T_CANCELLED"; return 2; }
     fi
     _close_session "$agent"
     if agent_logged_in "$agent"; then
-        printf "\033[1;31m$T_STILL\033[0m\n" "$(agent_title "$agent")"
+        ui_fail "$(printf "$T_STILL" "$(agent_title "$agent")")"
         return 1
     fi
-    printf "\033[1;32m$T_LOGGED_OUT\033[0m\n" "$(agent_title "$agent")"
-    [[ "$agent" == "claude" ]] && echo "$T_UNSET"
+    ui_ok "$(printf "$T_LOGGED_OUT" "$(agent_title "$agent")")"
+    [[ "$agent" == "claude" ]] && ui_note "$T_UNSET"
     _leave_schedule "$agent" "$yes"
     return 0
 }
 
+# ── History ───────────────────────────────────────────────────────────────────
+# The last runs of each agent in one table, a group of rows per agent. A failure shows its fix, or else what
+# the agent answered.
 history() {
-    local agent
+    local agent line runs run result when what tag first rows=()
+    ui_section "$T_LOG_TITLE"
+    echo ""
     for agent in ${1:-$AGENTS}; do
-        printf '\n\033[1;33m%s\033[0m\n' "$(agent_title "$agent")"
-        grep -sE '\] (OK|LIMIT|ERROR)' "$(agent_log "$agent")" | tail -n 8 \
-            | sed -E $'s/\\] OK/] \e[1;32mOK\e[0m/; s/\\] LIMIT/] \e[1;33mLIMIT\e[0m/; s/\\] ERROR/] \e[1;31mERROR\e[0m/' \
-            || echo "  $T_NEVER"
+        (( ${#rows[@]} )) && rows+=("--")
+        first=$(agent_title "$agent")
+        runs=$(grep -sE '\] (OK|LIMIT|ERROR)' "$(agent_log "$agent")" | tail -n 8)
+        if [[ -z "$runs" ]]; then
+            rows+=("$first$SEP$SEP$SEP$C_DIM$T_NEVER$C_RESET")
+            continue
+        fi
+        while IFS= read -r line; do
+            run=$(describe_run "$line")
+            result="${run%%|*}" when="${run#*|}" when="${when%%|*}" what="${run##*|}"
+            case "$result" in
+                ok) tag="$C_GREEN$T_R_OK$C_RESET" ;;
+                error) tag="$C_RED$T_R_ERROR$C_RESET"
+                       if [[ "$what" == "$U_RUN_ERROR" ]]; then
+                           what=$(sed -E 's/^[^]]*\] \[[A-Z]+\] ERROR[^:]*: *//' <<< "$line" | cut -c1-70)
+                       else
+                           what="${what#"$U_RUN_ERROR, "}"
+                       fi ;;
+                *) tag="$C_YELLOW$T_R_LIMIT$C_RESET" ;;
+            esac
+            rows+=("$first$SEP$when$SEP$tag$SEP$what")
+            first=""
+        done <<< "$runs"
+    done
+    { printf '%s\n' "$T_H_AGENT$SEP$T_H_WHEN$SEP$T_H_RESULT$SEP$T_H_WHAT"; printf '%s\n' "${rows[@]}"; } | ui_table
+    echo ""
+}
+
+# ── Updates ───────────────────────────────────────────────────────────────────
+_version() {
+    printf '%s (%s)' "$(cat "$SCRIPT_DIR/version.txt" 2>/dev/null || echo "?")" \
+        "$(git -C "$SCRIPT_DIR" log -1 --format=%h 2>/dev/null || echo "?")"
+}
+
+# Returns 0 when a new version came in, 3 when it was already the latest and 1 when the pull failed.
+update() {
+    local before after answer
+    ui_section "$T_UPDATE_TITLE"
+    printf '\n  %s\n' "$T_UPDATING"
+    before=$(_version)
+    git -C "$SCRIPT_DIR" config core.fileMode false
+    if ! answer=$(git -C "$SCRIPT_DIR" pull --ff-only -q 2>&1); then
+        ui_fail "$T_UPDATE_FAILED"
+        printf '%s\n' "$answer" | tail -n 3 | sed 's/^/    /'
+        return 1
+    fi
+    chmod +x "$SCRIPT_DIR"/*.sh "$SCRIPT_DIR/keepalive"
+    write_crontab
+    after=$(_version)
+    if [[ "$before" == "$after" ]]; then
+        ui_ok "$(printf "$T_UP_TO_DATE" "$after")"
+        return 3
+    fi
+    ui_ok "$(printf "$T_UPDATED" "$before" "$after")"
+    return 0
+}
+
+_agent_version() { "$1" --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1; }
+
+# Every agent CLI to its latest version. A Claude installed in ~/.local/bin updates itself; the rest are npm
+# packages, global ones needing sudo. An agent that is running is left alone, as the cron's send could be it.
+update_agents() {
+    local agent package before after answer prefix sudo=()
+    ui_section "$T_UPGRADE_TITLE"
+    printf '\n  %s\n\n' "$T_UPGRADE_NOTE"
+    prefix=$(npm prefix -g 2>/dev/null)
+    if [[ -n "$prefix" && ! -w "$prefix/lib" ]]; then
+        sudo=(sudo)
+        sudo -n true 2>/dev/null || ui_note "$T_NEEDS_SUDO"
+    fi
+    for agent in $AGENTS_KNOWN; do
+        agent_installed "$agent" || continue
+        package=$(agent_package "$agent")
+        if pgrep -u "$(id -u)" -f "(^|/)$agent( |\$)|$package" >/dev/null 2>&1; then
+            ui_warn "$(printf "$T_BUSY" "$(agent_title "$agent")")"
+            continue
+        fi
+        before=$(_agent_version "$agent")
+        printf '  %s\r' "$(printf "$T_UPGRADING" "$(agent_title "$agent")")"
+        if [[ "$agent" == claude && "$(command -v claude)" == "$HOME/.local/bin/claude" ]]; then
+            answer=$(timeout 300 claude update 2>&1)
+        else
+            answer=$(timeout 600 "${sudo[@]}" npm install -g "$package@latest" 2>&1)
+        fi
+        local code=$?
+        hash -r
+        after=$(_agent_version "$agent")
+        printf '\033[2K'
+        if (( code != 0 )); then
+            ui_fail "$(printf "$T_UPGRADE_FAILED" "$(agent_title "$agent")")"
+            printf '%s\n' "$answer" | grep -v '^[[:space:]]*$' | tail -n 3 | cut -c1-110 | sed 's/^/    /'
+        elif [[ "$before" == "$after" ]]; then
+            ui_ok "$(printf "$T_SAME" "$(agent_title "$agent")" "${after:-?}")"
+        else
+            ui_ok "$(printf "$T_UPGRADED" "$(agent_title "$agent")" "${before:-?}" "${after:-?}")"
+        fi
     done
     echo ""
 }
 
-update() {
-    git -C "$SCRIPT_DIR" config core.fileMode false
-    git -C "$SCRIPT_DIR" pull --ff-only -q && chmod +x "$SCRIPT_DIR"/*.sh "$SCRIPT_DIR/keepalive"
-    write_crontab
-    echo "$T_UPDATED"
+# ── Menu ──────────────────────────────────────────────────────────────────────
+# The person's terminal, with `menu` to come back. Their own startup files still run.
+_terminal() {
+    ui_clear
+    ui_section "$T_TERMINAL_TITLE"
+    printf '\n  %s\n\n' "$T_TERMINAL_BACK"
+    KEEPALIVE_NOTICE="" bash --rcfile "$SCRIPT_DIR/terminal-rc.sh" -i
+}
+
+_then_pause() {  # runs an action and waits before the menu comes back, unless the person went back from it
+    "$@"
+    (( $? == BACK )) || ui_pause
 }
 
 menu() {
-    if ! command -v whiptail >/dev/null 2>&1 || [[ ! -t 0 ]]; then status; return; fi
-    local choice
-    choice=$(whiptail --title "agent-keepalive" --menu "$T_MENU" 17 56 7 \
-        status "$T_M_STATUS" login "$T_M_LOGIN" logout "$T_M_LOGOUT" schedule "$T_M_SCHEDULE" \
-        test "$T_M_TEST" log "$T_M_LOG" update "$T_M_UPDATE" 3>&1 1>&2 2>&3) || return 0
-    "$0" "$choice"
+    [[ -t 0 && -t 1 ]] || { status; return; }
+    local notice
+    notice=$(printf '%s' "${KEEPALIVE_NOTICE:-}" | base64 -d 2>/dev/null)
+    while true; do
+        load_config
+        ui_clear
+        [[ -n "$notice" ]] && printf '%s\n' "$notice"
+        notice=""
+        _overview brief
+        ui_group "$T_G_SESSIONS"
+        ui_option 1 "$T_M_TEST"
+        ui_option 2 "$T_M_LOG"
+        ui_option 3 "$T_M_SCHEDULE"
+        ui_group "$T_G_ACCOUNTS"
+        ui_option 4 "$T_M_LOGIN"
+        ui_option 5 "$T_M_LOGOUT"
+        ui_group "$T_G_UPDATE"
+        ui_option 6 "$T_M_UPGRADE"
+        ui_option 7 "$T_M_UPDATE"
+        ui_group "$T_G_TERMINAL"
+        ui_option 8 "$T_M_TERMINAL"
+        echo ""
+        ui_option 0 "${KEEPALIVE_EXIT_LABEL:-$T_M_EXIT}"
+        ui_choose "$U_PICK" 8 || return 0
+        case "$ANSWER" in
+            0) return 0 ;;
+            1) ui_clear; _then_pause bash "$SCRIPT_DIR/test.sh" --ask ;;
+            2) ui_clear; _then_pause history ;;
+            3) bash "$SCRIPT_DIR/update-schedule.sh" ;;
+            4) _then_pause login ;;
+            5) _then_pause logout ;;
+            6) ui_clear; _then_pause update_agents ;;
+            7)
+                ui_clear
+                update
+                if (( $? == 0 )); then
+                    ui_note "$T_REOPEN"
+                    ui_pause
+                    KEEPALIVE_NOTICE="" exec bash "$SCRIPT_DIR/keepalive" menu
+                fi
+                ui_pause ;;
+            8) _terminal ;;
+        esac
+    done
+}
+
+_help() {
+    cat <<'HELP'
+  keepalive                  abre el menú, con todas las opciones y una terminal
+  keepalive status           el horario, el próximo envío y cada agente con su cuenta y su último envío
+  keepalive login [agente]   conecta un agente, Claude con un token que dura un año
+  keepalive logout [agente]  cierra la sesión de un agente en esta máquina, y con --yes no pregunta
+  keepalive schedule         cambia los días, las horas y los agentes de la sesión automática
+  keepalive test             hace un envío real a cada agente y revisa el resultado
+  keepalive log [agente]     muestra los últimos envíos
+  keepalive update           baja la versión más reciente de agent-keepalive sin tocar tu horario
+  keepalive update-agents    actualiza Claude Code, Codex y OpenCode sin tocar sus sesiones
+  keepalive uninstall        quita el cron, la configuración y el comando
+HELP
 }
 
 case "${1:-}" in
-    "") menu ;;
+    ""|menu) menu ;;
     status) status ;;
     login) login "${2:-}" ;;
-    logout) shift; logout "$@"; exit $? ;;
-    schedule) exec "$SCRIPT_DIR/update-schedule.sh" ;;
-    test) exec "$SCRIPT_DIR/test.sh" ;;
+    logout) shift; logout "$@"; code=$?; (( code == BACK )) && code=0; exit "$code" ;;
+    schedule) exec bash "$SCRIPT_DIR/update-schedule.sh" ;;
+    test) exec bash "$SCRIPT_DIR/test.sh" ;;
     log|history) history "${2:-}" ;;
-    update) update ;;
-    install) exec "$SCRIPT_DIR/install.sh" ;;
-    uninstall) exec "$SCRIPT_DIR/uninstall.sh" ;;
-    -h|--help|help) sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//' ;;
-    *) echo "keepalive: unknown command ${1}. See: keepalive help"; exit 1 ;;
+    update) update; (( $? == 1 )) && exit 1; exit 0 ;;
+    update-agents) update_agents ;;
+    install) exec bash "$SCRIPT_DIR/install.sh" ;;
+    uninstall) exec bash "$SCRIPT_DIR/uninstall.sh" ;;
+    -h|--help|help) _help ;;
+    *) printf "$T_UNKNOWN_COMMAND\n" "$1"; exit 1 ;;
 esac
