@@ -227,8 +227,10 @@ paths, never `-A` or `.`. It never changes the version or tags.
   between two rules, options are numbered under small headings and lists are tables (`ui_table`). An option nothing
   else starts with is taken with one key, with no Enter (`ui_choose`), and `0` goes back from every screen. Tags are
   coloured text, never a background. No whiptail.
-- **Plain Spanish on screen.** No colon or semicolon inside a sentence, no em dash, no ellipsis; a comma, a
-  period or parentheses take their place.
+- **Plain Spanish on screen.** A colon goes where Spanish expects one: after a label that introduces its value
+  (`Horario:`), at the end of a prompt (`Elige una opción:`), and before a command to type, a list or what a
+  program answered (`corre: keepalive login claude`, `Esto respondió git:`). Not in the middle of an ordinary
+  sentence. No semicolon, no em dash, no ellipsis.
 - **The cron has no terminal.** Everything `session-starter.sh` calls works with no terminal, no input and the
   short `PATH` that `write_crontab` sets.
 - **Comments in English**, only for a non-obvious why. Never narrate the change, never commented-out code.
@@ -261,7 +263,7 @@ Removing a test is gated: the proposal names each scenario and its reason, and t
 - [ ] Edge cases listed in the spec, section 4, each one tested or recorded as analysed and discarded
 - [ ] Works from the cron, with no terminal, when it touches a send
 - [ ] An install from the previous version keeps sending after it updates, with its schedule and history
-- [ ] Every new string in Spanish, with no colon or semicolon inside a sentence
+- [ ] Every new string in Spanish, with a colon only where Spanish expects one and no semicolon
 - [ ] `README.md`, `keepalive help` and "About agent-keepalive" below match what the tool does; `CHANGELOG.md`
       comes from the pull request titles
 - [ ] No token or login code in the output or the logs

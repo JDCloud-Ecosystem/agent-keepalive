@@ -60,7 +60,7 @@ approved_at: ~
 
 ### Textos
 
-<!-- Cada texto nuevo, en español, sin dos puntos ni punto y coma dentro de una oración. Que quepa en 72 columnas. -->
+<!-- Cada texto nuevo, en español. Dos puntos tras una etiqueta, al final de una pregunta y antes de un comando o una lista; nunca punto y coma. Que quepa en 72 columnas. -->
 
 - Sin definir
 
@@ -171,7 +171,7 @@ approved_at: ~
 - [ ] Casos límite enumerados en §4, cada uno codificado o descartado con su motivo
 - [ ] Probado sin terminal, como lo corre el cron, si toca un envío
 - [ ] Una instalación de la versión anterior sigue enviando después de actualizar
-- [ ] Cada texto nuevo en español, sin dos puntos ni punto y coma dentro de una oración
+- [ ] Cada texto nuevo en español, con dos puntos solo donde el español los espera y sin punto y coma
 - [ ] `README.md`, `keepalive help` y «About agent-keepalive» de `AGENTS.md` al día
 
 ---

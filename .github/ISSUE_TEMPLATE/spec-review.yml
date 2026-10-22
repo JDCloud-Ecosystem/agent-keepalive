@@ -39,7 +39,7 @@ body:
         - label: "Qué guarda la instalación (configuración, logs, cron, token) y qué cambia, o «Sin cambios»"
         - label: "Qué ve una instalación que actualiza desde la versión anterior"
         - label: "Funciona desde el cron, sin terminal"
-        - label: "Textos en español, sin dos puntos ni punto y coma dentro de una oración"
+        - label: "Textos en español, con dos puntos solo donde el español los espera y sin punto y coma"
         - label: "Escenarios de prueba completos (feliz, sin red, agente sin sesión, actualización)"
         - label: "Casos límite enumerados por completo, cada uno codificado o descartado con su motivo"
         - label: "Plan de implementación con tareas concretas y archivos afectados"
