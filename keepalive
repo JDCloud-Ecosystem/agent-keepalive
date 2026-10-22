@@ -7,9 +7,11 @@
 #   keepalive schedule        days, hours and which agents run
 #   keepalive test            run every chosen agent now
 #   keepalive log [agent]     recent runs
-#   keepalive update          latest agent-keepalive, same settings
+#   keepalive update [--yes]  latest agent-keepalive, same settings; shows what the new version changes first
+#   keepalive changelog       what each version changed, the installed one first
 #   keepalive update-agents   latest Claude Code, Codex and OpenCode, same logins
 #   keepalive uninstall
+#   keepalive migrate         run by an update with the new code, so what the install keeps is up to date
 set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 # shellcheck source=lib.sh
@@ -20,9 +22,12 @@ migrate_token
 SEP=$'\x1f'  # splits the cells of a table row
 DAY=86400
 RENEW_DAYS=30  # how long before the year token ends the menu starts saying so
+CHANGES_WIDTH=42   # the Cambio column, so a table of changes fits a 72-column terminal
+CHANGES_VERSIONS=5 # versions one table of changes shows at most
 
 T_TITLE="SESIONES AUTOMÁTICAS DE TUS AGENTES"
 T_SCHEDULE="Horario        "; T_NEXT="Próximo envío  "; T_NEXT_NONE="ninguno, no hay días ni sesiones activas"
+T_VERSION="Versión        "; T_V_NEWER="hay una nueva, la %s"; T_NO_NUMBER="sin número"
 T_H_STATE="Estado"; T_H_AGENT="Agente"; T_H_SESSION="Sesión"; T_H_ACCOUNT="Cuenta"; T_H_LAST="Último envío"
 T_NOT_ON="fuera de la sesión automática"
 T_NOT_INSTALLED="no instalado"; T_NO_LOGIN="sin sesión"; T_LOGIN_OK="con sesión"; T_YEAR="hasta el"
@@ -43,6 +48,7 @@ T_G_SESSIONS="SESIONES AUTOMÁTICAS"; T_G_ACCOUNTS="CUENTAS"; T_G_UPDATE="ACTUAL
 T_M_TEST="Probar ahora"; T_M_LOG="Ver el historial de envíos"; T_M_SCHEDULE="Cambiar el horario o los agentes"
 T_M_LOGIN="Conectar o cambiar una cuenta"; T_M_LOGOUT="Cerrar la sesión de una cuenta"
 T_M_UPGRADE="Actualizar Claude Code, Codex y OpenCode"; T_M_UPDATE="Actualizar agent-keepalive"
+T_M_UPDATE_TO="Actualizar agent-keepalive a la %s"
 T_M_TERMINAL="Usar la terminal"; T_M_EXIT="Salir"
 T_LOG_TITLE="HISTORIAL DE ENVÍOS"; T_H_WHEN="Cuándo"; T_H_RESULT="Resultado"; T_H_WHAT="Qué pasó"
 T_R_OK="OK"; T_R_LIMIT="LÍMITE"; T_R_ERROR="FALLÓ"
@@ -66,9 +72,23 @@ T_ASK_LEAVE="¿Sacas también a %s de la sesión automática?"
 T_LEFT="%s salió de la sesión automática y el cron quedó al día."
 T_STAYS="%s sigue en la sesión automática, y sus envíos fallarán hasta que lo vuelvas a conectar."
 T_ONLY_ONE="%s sigue en la sesión automática porque es el único agente, y sus envíos fallarán hasta que lo vuelvas a conectar."
-T_UPDATE_TITLE="ACTUALIZAR AGENT-KEEPALIVE"; T_UPDATING="Bajando la versión más reciente."
-T_UPDATED="Actualizado de %s a %s. Tu horario sigue igual."; T_UP_TO_DATE="Ya tenías la versión más reciente, %s."
+T_UPDATE_TITLE="ACTUALIZAR AGENT-KEEPALIVE"; T_LOOKING="Buscando la versión más reciente en GitHub."
+T_FETCH_FAILED="No se pudo revisar GitHub. Revisa la conexión y vuelve a intentarlo. Esto respondió git."
+T_NEW_VERSION="Hay una versión nueva, la %s. Tienes la %s."; T_NEW_VERSION_BARE="Hay una versión nueva, la %s."
+T_NEW_CHANGES="Hay cambios nuevos en main que todavía no tienen número de versión."
+T_ASK_UPDATE="¿Actualizar ahora?"; T_NOT_UPDATED="No se actualizó. La opción sigue en el menú para cuando quieras."
+T_UPDATED="Actualizado de %s a %s. Tu horario sigue igual."; T_UP_TO_DATE="Ya tienes la versión más reciente, %s."
 T_UPDATE_FAILED="No se pudo actualizar. Esto respondió git."; T_REOPEN="El menú se abre otra vez con la versión nueva."
+T_STASHED="Tus cambios a mano en los archivos quedaron guardados, y git stash list los muestra."
+T_OWN_COMMITS="Esta copia tiene commits propios que no están en GitHub, así que no se tocó nada."
+T_CL_TITLE="CAMBIOS DE CADA VERSIÓN"; T_CL_INSTALLED="Tienes la %s."
+T_CL_BARE="Tu instalación no tiene número de versión."
+T_CL_NEWER="Hay una versión nueva, la %s. La opción 7 del menú dice qué trae."
+T_CL_NOTE="Cada cambio va como quedó en CHANGELOG.md, en inglés."
+T_CL_MORE="Las versiones anteriores están en CHANGELOG.md."; T_CL_NONE="CHANGELOG.md no trae esas versiones."
+T_H_VERSION="Versión"; T_H_KIND="Tipo"; T_H_CHANGE="Cambio"
+T_K_FEAT="Nuevo"; T_K_FIX="Arreglo"; T_K_PERF="Mejora"; T_K_BREAKING="Importante"; T_K_TEXT="Resumen"
+T_K_INTERNAL="Interno"; T_INTERNAL="Cambios internos, nada cambia al usarlo"
 T_UPGRADE_TITLE="ACTUALIZAR CLAUDE CODE, CODEX Y OPENCODE"
 T_UPGRADE_NOTE="Tus sesiones y cuentas no cambian. Cada agente tarda alrededor de un minuto."
 T_UPGRADING="Actualizando %s"; T_UPGRADED="%s pasó de %s a %s"; T_SAME="%s ya estaba al día, %s"
@@ -222,10 +242,12 @@ _agents_table() {  # full|brief
 }
 
 _overview() {  # full|brief
-    local next
+    local next version newer
     ui_section "$T_TITLE"
     next=$(next_run_text) || next="$T_NEXT_NONE"
-    printf '\n  %s%s\n  %s%s\n\n' "$T_SCHEDULE" "$(schedule_text)" "$T_NEXT" "$next"
+    version=$(installed_version) || version="$T_NO_NUMBER"
+    newer=$(newer_version) && version+="$C_YELLOW, $(printf "$T_V_NEWER" "$newer")$C_RESET"
+    printf '\n  %s%s\n  %s%s\n  %s%s\n\n' "$T_SCHEDULE" "$(schedule_text)" "$T_NEXT" "$next" "$T_VERSION" "$version"
     _agents_table "$1"
 }
 
@@ -438,32 +460,217 @@ history() {
 }
 
 # ── Updates ───────────────────────────────────────────────────────────────────
+# The words of a text in lines of at most width characters.
+_wrap() {  # text, width
+    local LC_ALL=C.UTF-8 line="" word words=()
+    read -ra words <<< "$1"
+    for word in "${words[@]}"; do
+        if [[ -z "$line" ]]; then
+            line="$word"
+        elif (( ${#line} + 1 + ${#word} <= $2 )); then
+            line+=" $word"
+        else
+            printf '%s\n' "$line"
+            line="$word"
+        fi
+    done
+    [[ -n "$line" ]] && printf '%s\n' "$line"
+    return 0
+}
+
+# Each change of a CHANGELOG.md on standard input as version, date, kind and text split by SEP, newest version
+# first. Release Please writes one line per change, under a heading per kind; a version written by hand is one
+# paragraph, kind text. The links to the pull request and the commit are left out.
+_changelog_entries() {
+    awk -v sep="$SEP" '
+        function flush() { if (ver != "" && prose != "") print ver sep date sep "text" sep prose; prose = "" }
+        /^## / {
+            flush()
+            ver = $0; sub(/^## \[?/, "", ver); sub(/[] (].*$/, "", ver)
+            date = ""
+            if (match($0, /[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/)) date = substr($0, RSTART, RLENGTH)
+            kind = "text"; next
+        }
+        /^### / {
+            flush(); s = substr($0, 5)
+            if (s == "Features") kind = "feat"
+            else if (s == "Bug Fixes") kind = "fix"
+            else if (s ~ /^Performance/) kind = "perf"
+            else if (s ~ /BREAKING/) kind = "breaking"
+            else kind = "other"
+            next
+        }
+        ver == "" { next }
+        /^[*-] / {
+            t = substr($0, 3)
+            gsub(/ \(\[[^]]*\]\([^)]*\)\)/, "", t)
+            sub(/^\*\*[^*]*:\*\* /, "", t)
+            print ver sep date sep kind sep t; next
+        }
+        kind == "text" && NF { prose = prose (prose == "" ? "" : " ") $0 }
+        END { flush() }'
+}
+
+# A table with what each version changed, from a CHANGELOG.md on standard input: the versions after the first
+# argument (all when empty) up to the second (all when empty), newest first, CHANGES_VERSIONS at most. Changes a
+# person does not notice (docs, CI, refactors) become one Interno row when they are all a version has.
+_changes_table() {  # after, up_to
+    local after="$1" upto="$2" entries=() entry ver date kind words label version="" day="" versions=0 more=false
+    local rows=() pending=() hidden=false first line
+    mapfile -t entries < <(_changelog_entries)
+    _flush_version() {
+        [[ -z "$version" ]] && return 0
+        (( ${#pending[@]} )) || { [[ "$hidden" == true ]] && pending=("$T_K_INTERNAL$SEP$T_INTERNAL"); }
+        (( ${#pending[@]} )) || return 0
+        (( versions )) && rows+=("--")
+        first=true
+        for entry in "${pending[@]}"; do
+            label="${entry%%"$SEP"*}"
+            while IFS= read -r line; do
+                if [[ "$first" == true ]]; then
+                    rows+=("$C_BOLD$version$C_RESET$SEP$label$SEP$line"); first=second
+                elif [[ "$first" == second ]]; then
+                    rows+=("$C_DIM$day$C_RESET$SEP$label$SEP$line"); first=false
+                else
+                    rows+=("$SEP$label$SEP$line")
+                fi
+                label=""
+            done < <(_wrap "${entry#*"$SEP"}" "$CHANGES_WIDTH")
+        done
+        [[ "$first" == second && -n "$day" ]] && rows+=("$C_DIM$day$C_RESET$SEP$SEP")
+        versions=$(( versions + 1 ))
+    }
+    for entry in "${entries[@]}"; do
+        IFS="$SEP" read -r ver date words <<< "$entry"
+        kind="${words%%"$SEP"*}" words="${words#*"$SEP"}"
+        if [[ "$ver" != "$version" ]]; then
+            _flush_version
+            version="" pending=() hidden=false
+            [[ -n "$after" ]] && ! version_newer "$ver" "$after" && continue
+            [[ -n "$upto" ]] && version_newer "$ver" "$upto" && continue
+            (( versions >= CHANGES_VERSIONS )) && { more=true; continue; }
+            version="$ver" day=""
+            [[ -n "$date" ]] && day=$(date -d "$date" '+%d/%m/%Y' 2>/dev/null || echo "$date")
+        fi
+        case "$kind" in
+            feat) pending+=("$T_K_FEAT$SEP$words") ;;
+            fix) pending+=("$T_K_FIX$SEP$words") ;;
+            perf) pending+=("$T_K_PERF$SEP$words") ;;
+            breaking) pending+=("$C_YELLOW$T_K_BREAKING$C_RESET$SEP$words") ;;
+            text) pending+=("$T_K_TEXT$SEP$words") ;;
+            *) hidden=true ;;
+        esac
+    done
+    _flush_version
+    if (( ${#rows[@]} == 0 )); then ui_note "$T_CL_NONE"; return 0; fi
+    { printf '%s\n' "$T_H_VERSION$SEP$T_H_KIND$SEP$T_H_CHANGE"; printf '%s\n' "${rows[@]}"; } | ui_table
+    [[ "$more" == true ]] && ui_note "$T_CL_MORE"
+    return 0
+}
+
 _version() {
-    printf '%s (%s)' "$(cat "$SCRIPT_DIR/version.txt" 2>/dev/null || echo "?")" \
+    printf '%s (%s)' "$(installed_version || echo "$T_NO_NUMBER")" \
         "$(git -C "$SCRIPT_DIR" log -1 --format=%h 2>/dev/null || echo "?")"
 }
 
-# Returns 0 when a new version came in, 3 when it was already the latest and 1 when the pull failed.
-update() {
-    local before after answer
-    ui_section "$T_UPDATE_TITLE"
-    printf '\n  %s\n' "$T_UPDATING"
-    before=$(_version)
-    git -C "$SCRIPT_DIR" config core.fileMode false
-    if ! answer=$(git -C "$SCRIPT_DIR" pull --ff-only -q 2>&1); then
-        ui_fail "$T_UPDATE_FAILED"
-        printf '%s\n' "$answer" | tail -n 3 | sed 's/^/    /'
+# Brings the clone to origin/main: a fast-forward when it can, and when main was rewritten with the same files
+# (HEAD's tree is somewhere in main's history), a reset onto it. Hand edits to tracked files go to the stash
+# first and set STASHED. Returns 2, with everything as it was, when the clone has commits of its own, and 1 with
+# git's answer in MOVE_ERROR when git fails.
+_move_to_main() {
+    local git=(git -C "$SCRIPT_DIR") tree trees
+    MOVE_ERROR=""
+    "${git[@]}" config core.fileMode false
+    if [[ -n "$("${git[@]}" status --porcelain --untracked-files=no)" ]]; then
+        MOVE_ERROR=$("${git[@]}" stash push -q -m "agent-keepalive, before updating on $(date +%F)" 2>&1) || return 1
+        STASHED=yes
+    fi
+    MOVE_ERROR=$("${git[@]}" merge -q --ff-only origin/main 2>&1) && return 0
+    tree=$("${git[@]}" rev-parse 'HEAD^{tree}')
+    trees=$("${git[@]}" log --format=%T origin/main)
+    if grep -qx "$tree" <<< "$trees"; then
+        MOVE_ERROR=$("${git[@]}" reset -q --hard origin/main 2>&1) && return 0
         return 1
     fi
-    chmod +x "$SCRIPT_DIR"/*.sh "$SCRIPT_DIR/keepalive"
-    write_crontab
-    after=$(_version)
-    if [[ "$before" == "$after" ]]; then
-        ui_ok "$(printf "$T_UP_TO_DATE" "$after")"
+    if [[ -n "$STASHED" ]]; then "${git[@]}" stash pop -q && STASHED=""; fi
+    return 2
+}
+
+# Looks for a new version, shows what it changes and asks before updating; --yes, or no terminal, skips the
+# question. Returns 0 when a new version came in, 3 when there was nothing to do or the person said no, and 1
+# when it could not update.
+update() {  # [--yes]
+    local before after current latest answer
+    ui_section "$T_UPDATE_TITLE"
+    printf '\n  %s\n' "$T_LOOKING"
+    if ! answer=$(check_update 2>&1); then
+        ui_fail "$T_FETCH_FAILED"
+        [[ -n "$answer" ]] && printf '%s\n' "$answer" | tail -n 3 | sed 's/^/    /'
+        return 1
+    fi
+    if [[ "$(git -C "$SCRIPT_DIR" rev-parse 'HEAD^{tree}' 2>/dev/null)" \
+          == "$(git -C "$SCRIPT_DIR" rev-parse 'origin/main^{tree}' 2>/dev/null)" ]]; then
+        # The same files, perhaps under a rewritten history; the clone follows main again without touching them.
+        [[ -z "$(git -C "$SCRIPT_DIR" status --porcelain --untracked-files=no)" ]] && STASHED="" && _move_to_main
+        write_crontab  # a hand edit of config.sh reaches the cron with an update, as it always has
+        ui_ok "$(printf "$T_UP_TO_DATE" "$(_version)")"
         return 3
     fi
+    if [[ "$(git -C "$SCRIPT_DIR" rev-list --count HEAD..origin/main 2>/dev/null)" == 0 ]]; then
+        write_crontab
+        ui_ok "$(printf "$T_UP_TO_DATE" "$(_version)")"  # main has nothing this copy lacks
+        return 3
+    fi
+    current=$(installed_version) latest=$(latest_version)
+    if version_newer "$latest" "$current"; then
+        if [[ -n "$current" ]]; then
+            printf '\n  %s\n\n' "$(printf "$T_NEW_VERSION" "$latest" "$current")"
+        else
+            printf '\n  %s\n\n' "$(printf "$T_NEW_VERSION_BARE" "$latest")"
+        fi
+        git -C "$SCRIPT_DIR" show origin/main:CHANGELOG.md 2>/dev/null | _changes_table "$current" "$latest"
+        ui_note "$T_CL_NOTE"
+    else
+        printf '\n  %s\n' "$T_NEW_CHANGES"
+    fi
+    if [[ "${1:-}" != --yes && -t 0 ]]; then
+        ui_yes "$T_ASK_UPDATE" false || { ui_note "$T_NOT_UPDATED"; return 3; }
+    fi
+    before=$(_version)
+    STASHED=""
+    _move_to_main
+    case $? in
+        0) ;;
+        2) ui_fail "$T_OWN_COMMITS"; return 1 ;;
+        *) ui_fail "$T_UPDATE_FAILED"; printf '%s\n' "$MOVE_ERROR" | tail -n 3 | sed 's/^/    /'; return 1 ;;
+    esac
+    chmod +x "$SCRIPT_DIR"/*.sh "$SCRIPT_DIR/keepalive"
+    # The new code, not this one already in memory, brings what the install keeps up to date.
+    bash "$SCRIPT_DIR/keepalive" migrate
+    after=$(_version)
     ui_ok "$(printf "$T_UPDATED" "$before" "$after")"
+    [[ -n "$STASHED" ]] && ui_note "$T_STASHED"
     return 0
+}
+
+changelog() {
+    local current newer
+    current=$(installed_version)
+    ui_section "$T_CL_TITLE"
+    if [[ -n "$current" ]]; then
+        printf '\n  %s\n' "$(printf "$T_CL_INSTALLED" "$current")"
+    else
+        printf '\n  %s\n' "$T_CL_BARE"
+    fi
+    newer=$(newer_version) && ui_warn "$(printf "$T_CL_NEWER" "$newer")"
+    echo ""
+    _changes_table "" "$current" < "$SCRIPT_DIR/CHANGELOG.md"
+    ui_note "$T_CL_NOTE"
+}
+
+migrate() {
+    migrate_token
+    write_crontab
 }
 
 _agent_version() { "$1" --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1; }
@@ -525,8 +732,9 @@ _then_pause() {  # runs an action and waits before the menu comes back, unless t
 
 menu() {
     [[ -t 0 && -t 1 ]] || { status; return; }
-    local notice
+    local notice newer
     notice=$(printf '%s' "${KEEPALIVE_NOTICE:-}" | base64 -d 2>/dev/null)
+    check_update --if-stale >/dev/null 2>&1 &
     while true; do
         load_config
         ui_clear
@@ -542,7 +750,11 @@ menu() {
         ui_option 5 "$T_M_LOGOUT"
         ui_group "$T_G_UPDATE"
         ui_option 6 "$T_M_UPGRADE"
-        ui_option 7 "$T_M_UPDATE"
+        if newer=$(newer_version); then
+            ui_option 7 "$C_YELLOW$(printf "$T_M_UPDATE_TO" "$newer")$C_RESET"
+        else
+            ui_option 7 "$T_M_UPDATE"
+        fi
         ui_group "$T_G_TERMINAL"
         ui_option 8 "$T_M_TERMINAL"
         echo ""
@@ -579,7 +791,8 @@ _help() {
   keepalive schedule         cambia los días, las horas y los agentes de la sesión automática
   keepalive test             hace un envío real a cada agente y revisa el resultado
   keepalive log [agente]     muestra los últimos envíos
-  keepalive update           baja la versión más reciente de agent-keepalive sin tocar tu horario
+  keepalive update           muestra lo que trae la versión más reciente y la baja sin tocar tu horario
+  keepalive changelog        muestra los cambios de la versión que tienes y de las anteriores
   keepalive update-agents    actualiza Claude Code, Codex y OpenCode sin tocar sus sesiones
   keepalive uninstall        quita el cron, la configuración y el comando
 HELP
@@ -593,7 +806,9 @@ case "${1:-}" in
     schedule) exec bash "$SCRIPT_DIR/update-schedule.sh" ;;
     test) exec bash "$SCRIPT_DIR/test.sh" ;;
     log|history) history "${2:-}" ;;
-    update) update; (( $? == 1 )) && exit 1; exit 0 ;;
+    update) update "${2:-}"; (( $? == 1 )) && exit 1; exit 0 ;;
+    changelog) changelog ;;
+    migrate) migrate ;;
     update-agents) update_agents ;;
     install) exec bash "$SCRIPT_DIR/install.sh" ;;
     uninstall) exec bash "$SCRIPT_DIR/uninstall.sh" ;;
